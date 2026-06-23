@@ -20,7 +20,7 @@ const audiences = [
     icon: CalendarDays,
     title: "For children",
     description:
-      "A safe, engaging session that makes time at the venue enjoyable too.",
+      "A safe, engaging session that makes their time at the venue enjoyable too.",
   },
   {
     icon: UsersRound,
@@ -50,7 +50,7 @@ export default function AboutUsPage() {
               Wellness works better when families are part of the picture.
             </h1>
             <p className="mt-5 max-w-2xl text-(--color-text-secondary) sm:text-md">
-              We partner with fitness, wellness and sports venues to create
+              We partner with fitness and sports venues to create
               family-friendly spaces where parents can prioritise their health
               and wellbeing while children enjoy safe, professionally
               supervised play sessions.
