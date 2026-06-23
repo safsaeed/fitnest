@@ -83,7 +83,7 @@ export default function AboutUsPage() {
               children&apos;s sessions into the places parents already want to go.
             </p>
             <p>
-              Our mission is to help venue partners create more inclusive,
+              Our mission is to help partner venues create more inclusive,
               accessible experiences for families, and to give parents more
               freedom to make wellbeing part of their routine.
             </p>
