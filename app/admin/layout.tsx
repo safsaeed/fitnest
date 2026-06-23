@@ -1,10 +1,22 @@
 import { redirect } from "next/navigation";
 import { getAdminSession } from "@/lib/auth";
-import { ButtonLink } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
 import { logoutAdmin } from "./logout/actions";
 import { SubmitButton } from "@/components/ui/submit-button";
+import {
+  NavigationLinks,
+  type NavigationItem,
+} from "@/components/ui/navigation-links";
+
+const adminNavigationItems: NavigationItem[] = [
+  { href: "/admin", label: "Dashboard", exact: true },
+  { href: "/admin/venues", label: "Venues" },
+  { href: "/admin/sessions", label: "Sessions" },
+  { href: "/admin/bookings", label: "Bookings" },
+  { href: "/admin/interests", label: "Interests" },
+  { href: "/admin/parents", label: "Parents" },
+];
 
 export default async function AdminLayout({
   children,
@@ -19,38 +31,30 @@ export default async function AdminLayout({
 
   return (
     <>
-      <header className="shadow-md sm:shadow-lg bg-white">
-        <div className="mx-auto flex items-center justify-between px-6 py-4 pb-2 max-w-6xl">
+      <header className="sticky top-0 z-40 bg-white/95 shadow-md backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-4">
             <Link href="/admin" className="flex">
               <Image
                 src="/logo.png"
-                alt="Logo"
-                width={80}
-                height={30}
+                alt="FitNest Studios"
+                width={89}
+                height={32}
                 priority
-                className="h-8 w-20"
+                className="block"
               />
             </Link>
 
-            <div className="gap-1 items-center hidden sm:flex print:hidden">
-              <ButtonLink variant="ghost" href="/admin/venues">
-                Venues
-              </ButtonLink>
-              <ButtonLink variant="ghost" href="/admin/sessions">
-                Sessions
-              </ButtonLink>
-              <ButtonLink variant="ghost" href="/admin/bookings">
-                Bookings
-              </ButtonLink>
-              <ButtonLink variant="ghost" href="/admin/interests">
-                Interests
-              </ButtonLink>
-            </div>
+            <nav
+              aria-label="Admin navigation"
+              className="hidden items-center gap-2 rounded-lg bg-(--color-brand-soft) p-1 print:hidden lg:flex"
+            >
+              <NavigationLinks items={adminNavigationItems} />
+            </nav>
           </div>
 
           <div className="flex items-center gap-4">
-            <p className="hidden text-sm text-(--color-text-secondary) sm:block print:hidden">
+            <p className="hidden text-sm text-(--color-text-secondary) print:hidden lg:block">
               {session.email}
             </p>
 
@@ -60,19 +64,11 @@ export default async function AdminLayout({
           </div>
         </div>
 
-        <nav className="sm:hidden flex px-2 py-2 justify-start items-center print:hidden overflow-x-scroll">
-          <ButtonLink variant="ghost" href="/admin/venues">
-            Venues
-          </ButtonLink>
-          <ButtonLink variant="ghost" href="/admin/sessions">
-            Sessions
-          </ButtonLink>
-          <ButtonLink variant="ghost" href="/admin/bookings">
-            Bookings
-          </ButtonLink>
-          <ButtonLink variant="ghost" href="/admin/interests">
-            Interests
-          </ButtonLink>
+        <nav
+          aria-label="Admin navigation"
+          className="flex items-center gap-1 overflow-x-auto bg-(--color-brand-soft) px-2 py-2 print:hidden lg:hidden"
+        >
+          <NavigationLinks items={adminNavigationItems} />
         </nav>
       </header>
 

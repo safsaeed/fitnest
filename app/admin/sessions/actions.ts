@@ -89,6 +89,7 @@ function validateCommonSessionFields({
   description,
   capacity,
   pricePounds,
+  memberPricePounds,
   minAge,
   maxAge,
 }: {
@@ -97,6 +98,7 @@ function validateCommonSessionFields({
   description: string;
   capacity: number;
   pricePounds: number;
+  memberPricePounds: number | null;
   minAge: number | null;
   maxAge: number | null;
 }) {
@@ -119,6 +121,14 @@ function validateCommonSessionFields({
     return "invalid-price";
   }
 
+  if (memberPricePounds !== null && !isValidPrice(memberPricePounds)) {
+    return "invalid-member-price";
+  }
+
+  if (memberPricePounds !== null && memberPricePounds > pricePounds) {
+    return "member-price-too-high";
+  }
+
   if (!isValidAge(minAge) || !isValidAge(maxAge)) {
     return "invalid-age";
   }
@@ -138,6 +148,7 @@ function validateSessionInput({
   endsAt,
   capacity,
   pricePounds,
+  memberPricePounds,
   minAge,
   maxAge,
   mode,
@@ -149,6 +160,7 @@ function validateSessionInput({
   endsAt: Date | null;
   capacity: number;
   pricePounds: number;
+  memberPricePounds: number | null;
   minAge: number | null;
   maxAge: number | null;
   mode: "create" | "edit";
@@ -159,6 +171,7 @@ function validateSessionInput({
     description,
     capacity,
     pricePounds,
+    memberPricePounds,
     minAge,
     maxAge,
   });
@@ -203,6 +216,7 @@ function getSessionInput(formData: FormData) {
 
   const capacity = getFormNumber(formData, "capacity") ?? 10;
   const pricePounds = getFormNumber(formData, "pricePounds") ?? 10;
+  const memberPricePounds = getFormNumber(formData, "memberPricePounds");
   const minAge = getFormNumber(formData, "minAge");
   const maxAge = getFormNumber(formData, "maxAge");
 
@@ -214,6 +228,7 @@ function getSessionInput(formData: FormData) {
     endsAt,
     capacity,
     pricePounds,
+    memberPricePounds,
     minAge,
     maxAge,
     isActive: getFormBoolean(formData, "isActive"),
@@ -234,6 +249,7 @@ function getRepeatingSessionInput(formData: FormData) {
 
   const capacity = getFormNumber(formData, "capacity") ?? 10;
   const pricePounds = getFormNumber(formData, "pricePounds") ?? 10;
+  const memberPricePounds = getFormNumber(formData, "memberPricePounds");
   const minAge = getFormNumber(formData, "minAge");
   const maxAge = getFormNumber(formData, "maxAge");
 
@@ -248,9 +264,18 @@ function getRepeatingSessionInput(formData: FormData) {
     repeatPattern,
     capacity,
     pricePounds,
+    memberPricePounds,
     minAge,
     maxAge,
   };
+}
+
+function pricePoundsToPence(pricePounds: number) {
+  return Math.round(pricePounds * 100);
+}
+
+function optionalPricePoundsToPence(pricePounds: number | null) {
+  return pricePounds === null ? null : pricePoundsToPence(pricePounds);
 }
 
 async function createSingleSessionFromForm(formData: FormData): Promise<void> {
@@ -273,7 +298,8 @@ async function createSingleSessionFromForm(formData: FormData): Promise<void> {
       startsAt: input.startsAt!,
       endsAt: input.endsAt!,
       capacity: input.capacity,
-      pricePence: Math.round(input.pricePounds * 100),
+      pricePence: pricePoundsToPence(input.pricePounds),
+      memberPricePence: optionalPricePoundsToPence(input.memberPricePounds),
       minAge: input.minAge,
       maxAge: input.maxAge,
       isActive: true,
@@ -295,6 +321,7 @@ async function createRepeatingSessionsFromForm(
     description: input.description,
     capacity: input.capacity,
     pricePounds: input.pricePounds,
+    memberPricePounds: input.memberPricePounds,
     minAge: input.minAge,
     maxAge: input.maxAge,
   });
@@ -346,6 +373,9 @@ async function createRepeatingSessionsFromForm(
     redirect("/admin/sessions/new?error=too-many-sessions");
   }
 
+  const standardPricePence = pricePoundsToPence(input.pricePounds);
+  const memberPricePence = optionalPricePoundsToPence(input.memberPricePounds);
+
   const sessionsToCreate = sessionDates.map((date) => {
     const startsAt = combineDateAndTime(date, input.startTime);
     const endsAt = combineDateAndTime(date, input.endTime);
@@ -361,7 +391,8 @@ async function createRepeatingSessionsFromForm(
       startsAt,
       endsAt,
       capacity: input.capacity,
-      pricePence: Math.round(input.pricePounds * 100),
+      pricePence: standardPricePence,
+      memberPricePence,
       minAge: input.minAge,
       maxAge: input.maxAge,
       isActive: true,
@@ -421,7 +452,8 @@ export async function updateSession(
       startsAt: input.startsAt!,
       endsAt: input.endsAt!,
       capacity: input.capacity,
-      pricePence: Math.round(input.pricePounds * 100),
+      pricePence: pricePoundsToPence(input.pricePounds),
+      memberPricePence: optionalPricePoundsToPence(input.memberPricePounds),
       minAge: input.minAge,
       maxAge: input.maxAge,
       isActive: input.isActive,

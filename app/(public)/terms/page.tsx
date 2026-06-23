@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 export default function TermsPage() {
   return (
     <main className="min-h-(--min-page-height) px-4 py-8">
-      <section className="mx-auto max-w-5xl">
+      <section className="mx-auto max-w-6xl">
         <Card className="max-w-none">
           <p className="text-lg font-medium tracking-wide text-(--color-brand)">
             Parent / Guardian
@@ -63,7 +63,7 @@ export default function TermsPage() {
 
             <ul className="mt-3 list-disc space-y-3 pl-6 text-(--color-text-secondary)">
               <li>
-                Bookings cannot be cancelled 24 hours before the session start
+                Bookings and cancellations close at 6pm the day before the session.
               </li>
               <li>
                 If you are unable to attend, please contact us as soon as

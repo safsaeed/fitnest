@@ -46,7 +46,7 @@ export default async function EditSessionPage({
 
   return (
     <main className="min-h-(--min-page-height)">
-      <section className="mx-auto max-w-5xl px-6 py-8">
+      <section className="mx-auto max-w-6xl px-6 py-8">
         <div className="pb-10 sm:py-10">
           <Breadcrumbs
             items={[

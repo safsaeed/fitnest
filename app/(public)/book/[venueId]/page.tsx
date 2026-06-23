@@ -58,7 +58,7 @@ export default async function VenueSessionsPage({
 
   return (
     <main className="min-h-(--min-page-height)">
-      <section className="mx-auto max-w-5xl px-6 py-8">
+      <section className="mx-auto max-w-6xl px-6 py-8">
         <div className="pt-0 sm:pt-10">
           <Breadcrumbs
             items={[
@@ -148,7 +148,7 @@ export default async function VenueSessionsPage({
                         </p>
 
                         <p className="mt-1 text-xs text-(--color-text-muted)">
-                          Bookings close 2 hours before session start.
+                          Bookings close 6pm the day before the session.
                         </p>
                       </div>
                     </div>

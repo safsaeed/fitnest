@@ -99,7 +99,7 @@ export async function POST(request: Request) {
         cancelledAt: new Date(),
         refundedAt: new Date(),
         cancellationReason:
-          "Parent cancelled more than 24 hours before session.",
+          "Bookings and cancellations close at 6pm the day before the session.",
       },
     });
 

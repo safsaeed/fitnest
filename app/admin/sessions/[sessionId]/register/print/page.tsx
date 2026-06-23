@@ -63,7 +63,7 @@ export default async function PrintRegisterPage({
 
   return (
     <main className="bg-white p-6 text-black print:p-0">
-      <div className="mx-auto mb-6 flex max-w-5xl items-center justify-between print:hidden">
+      <div className="mx-auto mb-6 flex max-w-6xl items-center justify-between print:hidden">
         <div>
           <h1 className="text-xl font-semibold">Print session pack</h1>
           <p className="text-sm text-(--color-text-secondary)">
@@ -74,7 +74,7 @@ export default async function PrintRegisterPage({
         <PrintButton />
       </div>
 
-      <div className="mx-auto max-w-5xl print:max-w-none">
+      <div className="mx-auto max-w-6xl print:max-w-none">
         <AttendanceRegister
           title={session.title}
           dateTime={sessionDateTime}

@@ -26,6 +26,54 @@ function getMinSessionDate(session?: SessionWithVenue) {
   return formatDateInputValue(new Date());
 }
 
+function getErrorMessage(error?: string) {
+  if (error === "missing-required") {
+    return "Venue, title, start time and end time are required.";
+  }
+
+  if (error === "invalid-text") {
+    return "Session title or description is too long.";
+  }
+
+  if (error === "invalid-dates") {
+    return "End time must be after start time.";
+  }
+
+  if (error === "start-in-past") {
+    return "New sessions cannot start in the past.";
+  }
+
+  if (error === "invalid-capacity") {
+    return "Capacity must be between 1 and 500.";
+  }
+
+  if (error === "invalid-price") {
+    return "Standard price must be between £0 and £1,000.";
+  }
+
+  if (error === "invalid-member-price") {
+    return "Member price must be between £0 and £1,000.";
+  }
+
+  if (error === "member-price-too-high") {
+    return "Member price cannot be higher than the standard price.";
+  }
+
+  if (error === "invalid-age-range") {
+    return "Max age must be greater than or equal to min age.";
+  }
+
+  if (error === "invalid-age") {
+    return "Age limits must be between 0 and 18.";
+  }
+
+  if (error === "invalid-venue") {
+    return "Please select a valid active venue.";
+  }
+
+  return null;
+}
+
 export function SessionForm({
   session,
   venues,
@@ -34,27 +82,7 @@ export function SessionForm({
   error,
 }: SessionFormProps) {
   const minSessionDate = getMinSessionDate(session);
-
-  const errorMessage =
-    error === "missing-required"
-      ? "Venue, title, start time and end time are required."
-      : error === "invalid-text"
-        ? "Session title or description is too long."
-        : error === "invalid-dates"
-          ? "End time must be after start time."
-          : error === "start-in-past"
-            ? "New sessions cannot start in the past."
-            : error === "invalid-capacity"
-              ? "Capacity must be between 1 and 500."
-              : error === "invalid-price"
-                ? "Price must be between £0 and £1,000."
-                : error === "invalid-age-range"
-                  ? "Max age must be greater than or equal to min age."
-                  : error === "invalid-age"
-                    ? "Age limits must be between 0 and 18."
-                    : error === "invalid-venue"
-                      ? "Please select a valid active venue."
-                      : null;
+  const errorMessage = getErrorMessage(error);
 
   return (
     <Card>
@@ -158,7 +186,7 @@ export function SessionForm({
           />
 
           <InputField
-            label="Price per child (£)"
+            label="Standard price per child (£)"
             id="pricePounds"
             name="pricePounds"
             type="number"
@@ -169,6 +197,23 @@ export function SessionForm({
             defaultValue={
               session ? (session.pricePence / 100).toFixed(2) : "10.00"
             }
+          />
+
+          <InputField
+            label="Member price per child (£)"
+            id="memberPricePounds"
+            name="memberPricePounds"
+            type="number"
+            min={0}
+            max={1000}
+            step="0.01"
+            defaultValue={
+              session?.memberPricePence !== null &&
+              session?.memberPricePence !== undefined
+                ? (session.memberPricePence / 100).toFixed(2)
+                : ""
+            }
+            hint="Optional. Leave blank if this session does not have member pricing."
           />
 
           <InputField
