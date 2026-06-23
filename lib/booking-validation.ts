@@ -94,46 +94,75 @@ const childSchema = z.object({
   }),
 });
 
-const bookingFormSchema = z.object({
-  venueId: requiredText({
-    field: "Venue",
-    max: 100,
-  }),
+const bookingFormSchema = z
+  .object({
+    venueId: requiredText({
+      field: "Venue",
+      max: 100,
+    }),
 
-  sessionId: requiredText({
-    field: "Session",
-    max: 100,
-  }),
+    sessionId: requiredText({
+      field: "Session",
+      max: 100,
+    }),
 
-  parentName: requiredText({
-    field: "Parent / guardian name",
-    min: 2,
-    max: 100,
-  }),
+    bookingMode: z.enum(["guest", "account"]),
 
-  parentEmail: z
-    .string()
-    .trim()
-    .min(1, "Email is required.")
-    .max(254, "Email is too long.")
-    .email("Enter a valid email address."),
+    parentName: requiredText({
+      field: "Parent / guardian name",
+      min: 2,
+      max: 100,
+    }),
 
-  parentPhone: phoneSchema,
+    parentEmail: z
+      .string()
+      .trim()
+      .min(1, "Email is required.")
+      .max(254, "Email is too long.")
+      .email("Enter a valid email address."),
 
-  consentAccepted: z.string().refine((value) => value === "on", {
-    message: "You must confirm parent / guardian consent before continuing.",
-  }),
+    parentPhone: phoneSchema,
 
-  marketingOptIn: z.string().optional(),
+    consentAccepted: z.string().refine((value) => value === "on", {
+      message: "You must confirm parent / guardian consent before continuing.",
+    }),
 
-  children: z
-    .array(childSchema)
-    .min(1, "Add at least one child.")
-    .max(
-      MAX_CHILDREN_PER_BOOKING,
-      `You can add up to ${MAX_CHILDREN_PER_BOOKING} children.`,
-    ),
-});
+    marketingOptIn: z.string().optional(),
+
+    children: z
+      .array(childSchema)
+      .max(
+        MAX_CHILDREN_PER_BOOKING,
+        `You can add up to ${MAX_CHILDREN_PER_BOOKING} children.`,
+      ),
+
+    selectedParentChildIds: z
+      .array(z.string().trim().min(1))
+      .max(
+        MAX_CHILDREN_PER_BOOKING,
+        `You can add up to ${MAX_CHILDREN_PER_BOOKING} children.`,
+      ),
+  })
+  .superRefine((value, context) => {
+    if (value.bookingMode === "guest" && value.children.length < 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["children"],
+        message: "Add at least one child.",
+      });
+    }
+
+    if (
+      value.bookingMode === "account" &&
+      value.selectedParentChildIds.length < 1
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["selectedParentChildIds"],
+        message: "Select at least one saved child.",
+      });
+    }
+  });
 
 export type BookingFormInput = z.infer<typeof bookingFormSchema>;
 
@@ -153,26 +182,36 @@ function readChildCount(formData: FormData) {
   return Math.min(childCount, MAX_CHILDREN_PER_BOOKING);
 }
 
+function readSelectedParentChildIds(formData: FormData) {
+  const selectedIds = formData
+    .getAll("selectedParentChildIds")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(selectedIds)).slice(0, MAX_CHILDREN_PER_BOOKING);
+}
+
 export function parseBookingFormData(formData: FormData): BookingFormInput {
-  const childCount = readChildCount(formData);
+  const bookingMode =
+    getOptionalFormString(formData, "bookingMode") === "account"
+      ? "account"
+      : "guest";
+
+  const childCount = bookingMode === "guest" ? readChildCount(formData) : 0;
 
   const children = Array.from({ length: childCount }, (_, index) => ({
     firstName: getFormString(formData, `children[${index}][firstName]`),
     lastName: getFormString(formData, `children[${index}][lastName]`),
-    dateOfBirth: getFormString(
-      formData,
-      `children[${index}][dateOfBirth]`,
-    ),
+    dateOfBirth: getFormString(formData, `children[${index}][dateOfBirth]`),
     allergies: getFormString(formData, `children[${index}][allergies]`),
-    medicalNotes: getFormString(
-      formData,
-      `children[${index}][medicalNotes]`,
-    ),
+    medicalNotes: getFormString(formData, `children[${index}][medicalNotes]`),
   }));
 
   return bookingFormSchema.parse({
     venueId: getFormString(formData, "venueId"),
     sessionId: getFormString(formData, "sessionId"),
+    bookingMode,
 
     parentName: getFormString(formData, "parentName"),
     parentEmail: getFormString(formData, "parentEmail"),
@@ -182,5 +221,7 @@ export function parseBookingFormData(formData: FormData): BookingFormInput {
     marketingOptIn: getOptionalFormString(formData, "marketingOptIn"),
 
     children,
+    selectedParentChildIds:
+      bookingMode === "account" ? readSelectedParentChildIds(formData) : [],
   });
 }

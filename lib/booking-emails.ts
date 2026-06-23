@@ -2,6 +2,8 @@ import "server-only";
 import { getEmailFromAddress, resend } from "@/lib/email";
 import { formatFullDateTime, formatPrice, formatTime } from "@/lib/formatters";
 
+type BookingPricingType = "STANDARD" | "MEMBER";
+
 type BookingConfirmationEmailInput = {
   to: string;
   parentName: string;
@@ -16,7 +18,15 @@ type BookingConfirmationEmailInput = {
     lastName: string | null;
   }[];
   totalAmountPence: number;
+  unitPricePence?: number;
+  pricingType?: BookingPricingType;
+  bookingUrl?: string;
+  accountBookingUrl?: string | null;
 };
+
+function getPricingLabel(pricingType?: BookingPricingType) {
+  return pricingType === "MEMBER" ? "Member price" : "Standard price";
+}
 
 export async function sendBookingConfirmationEmail({
   to,
@@ -29,12 +39,30 @@ export async function sendBookingConfirmationEmail({
   endsAt,
   children,
   totalAmountPence,
+  unitPricePence,
+  pricingType,
+  bookingUrl,
+  accountBookingUrl,
 }: BookingConfirmationEmailInput) {
   const childNames = children
     .map((child) => [child.firstName, child.lastName].filter(Boolean).join(" "))
     .join(", ");
 
   const subject = `Booking confirmed: ${bookingReference}`;
+  const pricingLabel = getPricingLabel(pricingType);
+
+  const bookingLinkHtml = bookingUrl
+    ? `<p style="margin: 20px 0;"><a href="${bookingUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">View booking</a></p>`
+    : "";
+
+  const accountLinkHtml = accountBookingUrl
+    ? `<p style="margin: 12px 0 0; font-size: 14px;">You can also view this booking from your parent account: <a href="${accountBookingUrl}">${accountBookingUrl}</a></p>`
+    : "";
+
+  const pricePerChildHtml =
+    typeof unitPricePence === "number"
+      ? `<p style="margin: 0 0 8px;"><strong>Price per child:</strong> ${formatPrice(unitPricePence)} (${pricingLabel})</p>`
+      : "";
 
   const html = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
@@ -51,10 +79,14 @@ export async function sendBookingConfirmationEmail({
         <p style="margin: 0 0 8px;"><strong>Address:</strong> ${venueAddress || "TBC"}</p>
         <p style="margin: 0 0 8px;"><strong>Date/time:</strong> ${formatFullDateTime(startsAt)} - ${formatTime(endsAt)}</p>
         <p style="margin: 0 0 8px;"><strong>Children:</strong> ${childNames}</p>
+        ${pricePerChildHtml}
         <p style="margin: 0;"><strong>Total paid:</strong> ${formatPrice(totalAmountPence)}</p>
       </div>
 
-      <p>If you need to cancel, please note cancellations are only available more than 24 hours before the session start time.</p>
+      ${bookingLinkHtml}
+      ${accountLinkHtml}
+
+      <p>Bookings and cancellations close at 6pm the day before the session.</p>
 
       <p>Thanks,<br />Fitnest Studios</p>
     </div>
@@ -73,9 +105,12 @@ Venue: ${venueName}
 Address: ${venueAddress || "TBC"}
 Date/time: ${formatFullDateTime(startsAt)} - ${formatTime(endsAt)}
 Children: ${childNames}
+${typeof unitPricePence === "number" ? `Price per child: ${formatPrice(unitPricePence)} (${pricingLabel})` : ""}
 Total paid: ${formatPrice(totalAmountPence)}
+${bookingUrl ? `\nView booking: ${bookingUrl}` : ""}
+${accountBookingUrl ? `\nView in your account: ${accountBookingUrl}` : ""}
 
-Cancellations are only available more than 24 hours before the session start time.
+Bookings and cancellations close at 6pm the day before the session.
 
 Thanks,
 Fitnest Studios
@@ -90,7 +125,9 @@ Fitnest Studios
   });
 
   if (error) {
-    throw new Error(`Failed to send booking confirmation email: ${error.message}`);
+    throw new Error(
+      `Failed to send booking confirmation email: ${error.message}`,
+    );
   }
 }
 
@@ -106,6 +143,8 @@ type BookingCancellationEmailInput = {
     lastName: string | null;
   }[];
   totalAmountPence: number;
+  bookingUrl?: string;
+  accountBookingUrl?: string | null;
 };
 
 export async function sendBookingCancellationEmail({
@@ -117,12 +156,22 @@ export async function sendBookingCancellationEmail({
   startsAt,
   children,
   totalAmountPence,
+  bookingUrl,
+  accountBookingUrl,
 }: BookingCancellationEmailInput) {
   const childNames = children
     .map((child) => [child.firstName, child.lastName].filter(Boolean).join(" "))
     .join(", ");
 
   const subject = `Booking cancelled: ${bookingReference}`;
+
+  const bookingLinkHtml = bookingUrl
+    ? `<p style="margin: 20px 0;"><a href="${bookingUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">View booking</a></p>`
+    : "";
+
+  const accountLinkHtml = accountBookingUrl
+    ? `<p style="margin: 12px 0 0; font-size: 14px;">You can also view this booking from your parent account: <a href="${accountBookingUrl}">${accountBookingUrl}</a></p>`
+    : "";
 
   const html = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
@@ -140,6 +189,9 @@ export async function sendBookingCancellationEmail({
         <p style="margin: 0 0 8px;"><strong>Children:</strong> ${childNames}</p>
         <p style="margin: 0;"><strong>Refund amount:</strong> ${formatPrice(totalAmountPence)}</p>
       </div>
+
+      ${bookingLinkHtml}
+      ${accountLinkHtml}
 
       <p>Please allow a few working days for the refund to appear on your original payment method.</p>
 
@@ -160,6 +212,8 @@ Venue: ${venueName}
 Date/time: ${formatFullDateTime(startsAt)}
 Children: ${childNames}
 Refund amount: ${formatPrice(totalAmountPence)}
+${bookingUrl ? `\nView booking: ${bookingUrl}` : ""}
+${accountBookingUrl ? `\nView in your account: ${accountBookingUrl}` : ""}
 
 Please allow a few working days for the refund to appear on your original payment method.
 

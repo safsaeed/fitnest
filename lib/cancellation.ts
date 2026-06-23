@@ -1,10 +1,10 @@
-export function canCancelBooking(sessionStartsAt: Date) {
-  const now = new Date();
-  const twentyFourHoursFromNow = new Date(
-    now.getTime() + 1000 * 60 * 60 * 24
-  );
+import {
+  getSessionCutoffLabel,
+  isPastSessionCutoff,
+} from "@/lib/session-cutoff";
 
-  return sessionStartsAt > twentyFourHoursFromNow;
+export function canCancelBooking(sessionStartsAt: Date) {
+  return !isPastSessionCutoff(sessionStartsAt);
 }
 
 export function getCancellationStatus(sessionStartsAt: Date) {
@@ -14,6 +14,6 @@ export function getCancellationStatus(sessionStartsAt: Date) {
     canCancel,
     message: canCancel
       ? "This booking can be cancelled for a refund."
-      : "Cancellations are only available more than 24 hours before the session starts.",
+      : getSessionCutoffLabel("cancellation"),
   };
 }

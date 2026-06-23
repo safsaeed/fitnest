@@ -40,6 +40,19 @@ enum VenueInterestStatus {
   ARCHIVED
 }
 
+enum MembershipStatus {
+  INCOMPLETE
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  UNPAID
+}
+
+enum BookingPricingType {
+  STANDARD
+  MEMBER
+}
+
 model AdminUser {
   id           String    @id @default(cuid())
   name         String
@@ -48,27 +61,116 @@ model AdminUser {
   role         AdminRole @default(ADMIN)
   isActive     Boolean   @default(true)
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([email])
   @@index([isActive])
 }
 
-model Venue {
-  id        String   @id @default(cuid())
+model ParentUser {
+  id           String  @id @default(cuid())
+  name         String
+  email        String  @unique
+  phone        String?
+  passwordHash String
 
-  name      String
+  defaultEmergencyContactName  String?
+  defaultEmergencyContactPhone String?
+
+  stripeCustomerId String? @unique
+
+  isActive Boolean @default(true)
+
+  children             ParentChild[]
+  bookings             Booking[]
+  membership           Membership?
+  passwordResetTokens  ParentPasswordResetToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([isActive])
+}
+
+model ParentPasswordResetToken {
+  id           String     @id @default(cuid())
+  parentUserId String
+  parentUser   ParentUser @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
+
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([parentUserId])
+  @@index([expiresAt])
+  @@index([usedAt])
+}
+
+model ParentChild {
+  id           String     @id @default(cuid())
+  parentUserId String
+  parentUser   ParentUser @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
+
+  firstName   String
+  lastName    String?
+  dateOfBirth DateTime
+
+  allergies    String?
+  medicalNotes String?
+
+  isActive Boolean @default(true)
+
+  bookingChildren Child[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentUserId])
+  @@index([isActive])
+  @@index([dateOfBirth])
+}
+
+model Membership {
+  id           String     @id @default(cuid())
+  parentUserId String     @unique
+  parentUser   ParentUser @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
+
+  status MembershipStatus @default(INCOMPLETE)
+
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  cancelAtPeriodEnd Boolean   @default(false)
+  cancelledAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+model Venue {
+  id String @id @default(cuid())
+
+  name String
 
   addressLine1 String?
   addressLine2 String?
   city         String?
   county       String?
   postcode     String?
-  country      String?  @default("UK")
+  country      String? @default("UK")
 
-  latitude     Float?
-  longitude    Float?
+  latitude  Float?
+  longitude Float?
 
   isActive Boolean @default(true)
 
@@ -83,10 +185,10 @@ model Venue {
 }
 
 model Session {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
 
-  venueId   String
-  venue     Venue  @relation(fields: [venueId], references: [id])
+  venueId String
+  venue   Venue  @relation(fields: [venueId], references: [id])
 
   title       String
   description String?
@@ -94,8 +196,9 @@ model Session {
   startsAt DateTime
   endsAt   DateTime
 
-  capacity   Int @default(10)
-  pricePence Int @default(1000)
+  capacity         Int  @default(10)
+  pricePence       Int  @default(1000)
+  memberPricePence Int?
 
   minAge Int?
   maxAge Int?
@@ -113,12 +216,15 @@ model Session {
 }
 
 model Booking {
-  id                  String @id @default(cuid())
-  bookingReference    String @unique
-  bookingAccessToken  String? @unique
+  id                 String @id @default(cuid())
+  bookingReference   String @unique
+  bookingAccessToken String @unique
 
   sessionId String
   session   Session @relation(fields: [sessionId], references: [id])
+
+  parentUserId String?
+  parentUser   ParentUser? @relation(fields: [parentUserId], references: [id], onDelete: SetNull)
 
   parentName  String
   parentEmail String
@@ -131,19 +237,21 @@ model Booking {
   paymentStatus PaymentStatus @default(PENDING)
   refundStatus  RefundStatus  @default(NONE)
 
+  pricingType      BookingPricingType @default(STANDARD)
+  unitPricePence   Int
   totalAmountPence Int
-  childCount        Int
+  childCount       Int
 
   stripeCheckoutSessionId String?
   stripePaymentIntentId   String?
   stripeRefundId          String?
 
-  cancelledAt      DateTime?
+  cancelledAt        DateTime?
   cancellationReason String?
-  refundedAt       DateTime?
+  refundedAt         DateTime?
 
-  consentAccepted   Boolean  @default(false)
-  consentAcceptedAt DateTime?
+  consentAccepted    Boolean   @default(false)
+  consentAcceptedAt  DateTime?
   consentTextVersion String?
 
   marketingOptIn Boolean @default(false)
@@ -154,16 +262,21 @@ model Booking {
   updatedAt DateTime @updatedAt
 
   @@index([sessionId])
+  @@index([parentUserId])
   @@index([parentEmail])
   @@index([status])
   @@index([paymentStatus])
+  @@index([pricingType])
 }
 
 model Child {
   id String @id @default(cuid())
 
   bookingId String
-  booking   Booking @relation(fields: [bookingId], references: [id])
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  parentChildId String?
+  parentChild   ParentChild? @relation(fields: [parentChildId], references: [id], onDelete: SetNull)
 
   firstName String
   lastName  String?
@@ -177,12 +290,13 @@ model Child {
   updatedAt DateTime @updatedAt
 
   @@index([bookingId])
+  @@index([parentChildId])
   @@index([dateOfBirth])
 }
 
 model VenueInterest {
   id String @id @default(cuid())
-  
+
   parentEmail String
   city        String
   venueName   String
