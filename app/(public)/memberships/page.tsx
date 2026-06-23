@@ -17,7 +17,7 @@ const membershipBenefits = [
     icon: CirclePoundSterling,
     title: "All venues, one membership",
     description:
-      "Use your membership at any FitNest venue and enjoy discounted prices.",
+      "Use your membership at any FitNest venue and enjoy discounted prices on sessions.",
   },
   {
     icon: UsersRound,
