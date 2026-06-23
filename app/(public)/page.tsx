@@ -18,7 +18,7 @@ const benefits = [
     icon: CalendarDays,
     title: "Simple to fit around life",
     description:
-      "Choose a convenient session at one of our partner gyms and sports venues.",
+      "Choose a convenient session at one of our partner sports and fitness venues.",
   },
   {
     icon: Heart,
@@ -43,7 +43,7 @@ export default function HomePage() {
 
             <p className="mt-6 max-w-xl text-(--color-text-secondary) sm:text-md">
               FitNest Studios brings supervised children&apos;s play sessions to
-              gyms and sports venues, making it easier for parents to prioritise
+              sports and fitness venues, making it easier for parents to prioritise
               their health and wellbeing.
             </p>
 
