@@ -74,7 +74,7 @@ export default function MembershipsPage() {
             </h1>
             <p className="mt-5 text-base leading-7 text-(--color-text-secondary) sm:text-md">
               Become a FitNest member for £10/month and access member pricing on
-              eligible children&apos;s sessions for all the children on your
+              all sessions for all the children on your
               account.
             </p>
 
