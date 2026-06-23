@@ -12,7 +12,7 @@ const benefits = [
     icon: ShieldCheck,
     title: "A safe, supported space",
     description:
-      "Children can play, create and settle in while you make time for your own wellbeing.",
+      "Your child can play and relax while you take time for your own wellbeing.",
   },
   {
     icon: CalendarDays,
