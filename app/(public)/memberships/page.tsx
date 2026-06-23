@@ -107,12 +107,14 @@ export default function MembershipsPage() {
             </p>
             <ul className="mt-6 space-y-3 text-sm text-(--color-text-secondary)">
               <MembershipListItem>
-                Member prices on eligible sessions
+                Save 30% or more on all sessions
               </MembershipListItem>
               <MembershipListItem>
-                Benefits for every saved child
+                Unlock exclusive prices
               </MembershipListItem>
-              <MembershipListItem>Manage or cancel online</MembershipListItem>
+              <MembershipListItem>
+                Perfect for parents booking regularly
+              </MembershipListItem>
             </ul>
           </div>
         </div>
