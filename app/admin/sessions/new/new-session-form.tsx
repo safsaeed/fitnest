@@ -16,35 +16,67 @@ type NewSessionFormProps = {
   error?: string;
 };
 
+function getErrorMessage(error?: string) {
+  if (error === "missing-required") {
+    return "Please complete all required fields.";
+  }
+
+  if (error === "invalid-text") {
+    return "Session title or description is too long.";
+  }
+
+  if (error === "invalid-dates") {
+    return "End time must be after start time.";
+  }
+
+  if (error === "invalid-date-range") {
+    return "Last session date must be after the first session date.";
+  }
+
+  if (error === "start-in-past") {
+    return "New sessions cannot start in the past.";
+  }
+
+  if (error === "invalid-capacity") {
+    return "Capacity must be between 1 and 500.";
+  }
+
+  if (error === "invalid-price") {
+    return "Standard price must be between £0 and £1,000.";
+  }
+
+  if (error === "invalid-member-price") {
+    return "Member price must be between £0 and £1,000.";
+  }
+
+  if (error === "member-price-too-high") {
+    return "Member price cannot be higher than the standard price.";
+  }
+
+  if (error === "invalid-age-range") {
+    return "Max age must be greater than or equal to min age.";
+  }
+
+  if (error === "invalid-age") {
+    return "Age limits must be between 0 and 18.";
+  }
+
+  if (error === "no-sessions") {
+    return "No sessions could be created for that date range.";
+  }
+
+  if (error === "too-many-sessions") {
+    return "Too many sessions would be created. Please use a shorter date range.";
+  }
+
+  return null;
+}
+
 export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
   const [mode, setMode] = useState<"single" | "repeating">("single");
 
   const minDate = formatDateInputValue(new Date());
-
-  const errorMessage =
-    error === "missing-required"
-      ? "Please complete all required fields."
-      : error === "invalid-text"
-        ? "Session title or description is too long."
-        : error === "invalid-dates"
-          ? "End time must be after start time."
-          : error === "invalid-date-range"
-            ? "Last session date must be after the first session date."
-            : error === "start-in-past"
-              ? "New sessions cannot start in the past."
-              : error === "invalid-capacity"
-                ? "Capacity must be between 1 and 500."
-                : error === "invalid-price"
-                  ? "Price must be between £0 and £1,000."
-                  : error === "invalid-age-range"
-                    ? "Max age must be greater than or equal to min age."
-                    : error === "invalid-age"
-                      ? "Age limits must be between 0 and 18."
-                      : error === "no-sessions"
-                        ? "No sessions could be created for that date range."
-                        : error === "too-many-sessions"
-                          ? "Too many sessions would be created. Please use a shorter date range."
-                          : null;
+  const errorMessage = getErrorMessage(error);
 
   return (
     <Card>
@@ -225,7 +257,7 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
           />
 
           <InputField
-            label="Price per child (£)"
+            label="Standard price per child (£)"
             id="pricePounds"
             name="pricePounds"
             type="number"
@@ -233,6 +265,17 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
             min={0}
             max={1000}
             step="0.01"
+          />
+
+          <InputField
+            label="Member price per child (£)"
+            id="memberPricePounds"
+            name="memberPricePounds"
+            type="number"
+            min={0}
+            max={1000}
+            step="0.01"
+            hint="Optional. Leave blank if this session does not have member pricing."
           />
 
           <InputField
@@ -269,7 +312,6 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
 
         <div className="mt-6 flex items-center justify-end gap-4">
           <SubmitButton type="submit">
-            {" "}
             {mode === "repeating"
               ? "Create repeating sessions"
               : "Create session"}

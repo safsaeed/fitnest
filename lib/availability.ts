@@ -1,3 +1,9 @@
+import {
+  formatSessionCutoff,
+  getSessionCutoffLabel,
+  isPastSessionCutoff,
+} from "@/lib/session-cutoff";
+
 type BookingForAvailability = {
   childCount: number;
 };
@@ -18,9 +24,8 @@ export function getSessionAvailability(session: SessionForAvailability) {
   const spacesRemaining = Math.max(session.capacity - bookedChildrenCount, 0);
 
   const now = new Date();
-  const twoHoursFromNow = new Date(now.getTime() + 1000 * 60 * 60 * 2);
 
-  const isWithinBookingCutoff = session.startsAt <= twoHoursFromNow;
+  const isWithinBookingCutoff = isPastSessionCutoff(session.startsAt, now);
   const isFull = spacesRemaining <= 0;
   const isPast = session.startsAt <= now;
 
@@ -47,6 +52,7 @@ export function getSessionAvailability(session: SessionForAvailability) {
     isWithinBookingCutoff,
     canBook,
     statusLabel,
+    cutoffAt: formatSessionCutoff(session.startsAt),
   };
 }
 
@@ -78,7 +84,7 @@ export function validateBookingAvailability({
   if (availability.isWithinBookingCutoff) {
     return {
       ok: false as const,
-      reason: "Bookings close 2 hours before session start.",
+      reason: getSessionCutoffLabel("booking"),
       availability,
     };
   }

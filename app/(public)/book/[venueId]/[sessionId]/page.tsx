@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionAvailability } from "@/lib/availability";
@@ -14,6 +15,8 @@ import {
 } from "@/lib/formatters";
 import { ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { getParentSession } from "@/lib/parent-auth";
+import { calculateBookingPrice, hasActiveMembership } from "@/lib/pricing";
 
 type BookingPageProps = {
   params: Promise<{
@@ -25,6 +28,62 @@ type BookingPageProps = {
   }>;
 };
 
+function formatDateInput(date: Date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function calculateAgeAtDate(dateOfBirth: Date, sessionDate: Date) {
+  let age = sessionDate.getFullYear() - dateOfBirth.getFullYear();
+
+  const hasHadBirthdayThisYear =
+    sessionDate.getMonth() > dateOfBirth.getMonth() ||
+    (sessionDate.getMonth() === dateOfBirth.getMonth() &&
+      sessionDate.getDate() >= dateOfBirth.getDate());
+
+  if (!hasHadBirthdayThisYear) {
+    age--;
+  }
+
+  return age;
+}
+
+function getSavedChildEligibility({
+  dateOfBirth,
+  sessionDate,
+  minAge,
+  maxAge,
+}: {
+  dateOfBirth: Date;
+  sessionDate: Date;
+  minAge: number;
+  maxAge: number | null;
+}) {
+  const age = calculateAgeAtDate(dateOfBirth, sessionDate);
+
+  if (age < minAge) {
+    return {
+      isEligible: false,
+      eligibilityReason: `This child is too young for this session. Minimum age is ${minAge}.`,
+    };
+  }
+
+  if (maxAge !== null && age > maxAge) {
+    return {
+      isEligible: false,
+      eligibilityReason: `This child is too old for this session. Maximum age is ${maxAge}.`,
+    };
+  }
+
+  return {
+    isEligible: true,
+    eligibilityReason: null,
+  };
+}
+
 export default async function BookingPage({
   params,
   searchParams,
@@ -32,37 +91,109 @@ export default async function BookingPage({
   const { venueId, sessionId } = await params;
   const query = await searchParams;
 
-  const session = await prisma.session.findFirst({
-    where: {
-      id: sessionId,
-      venueId,
-      isActive: true,
-      venue: {
+  const parentSession = await getParentSession();
+
+  const [session, parentUser] = await Promise.all([
+    prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        venueId,
         isActive: true,
-      },
-    },
-    include: {
-      venue: true,
-      bookings: {
-        where: {
-          status: "CONFIRMED",
-        },
-        select: {
-          childCount: true,
+        venue: {
+          isActive: true,
         },
       },
-    },
-  });
+      include: {
+        venue: true,
+        bookings: {
+          where: {
+            status: "CONFIRMED",
+          },
+          select: {
+            childCount: true,
+          },
+        },
+      },
+    }),
+
+    parentSession
+      ? prisma.parentUser.findFirst({
+          where: {
+            id: parentSession.parentUserId,
+            isActive: true,
+          },
+          include: {
+            children: {
+              where: {
+                isActive: true,
+              },
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
+            membership: true,
+          },
+        })
+      : null,
+  ]);
 
   if (!session) {
     notFound();
   }
 
   const availability = getSessionAvailability(session);
+  const minAgeYears = session.minAge || 1;
+
+  const bookingPath = `/book/${venueId}/${sessionId}`;
+  const addChildHref = `/account/children/new?returnTo=${encodeURIComponent(
+    bookingPath,
+  )}`;
+
+  const savedChildren =
+    parentUser?.children.map((child) => {
+      const eligibility = getSavedChildEligibility({
+        dateOfBirth: child.dateOfBirth,
+        sessionDate: session.startsAt,
+        minAge: minAgeYears,
+        maxAge: session.maxAge,
+      });
+
+      return {
+        id: child.id,
+        firstName: child.firstName,
+        lastName: child.lastName,
+        dateOfBirth: formatDateInput(child.dateOfBirth),
+        allergies: child.allergies,
+        medicalNotes: child.medicalNotes,
+        isEligible: eligibility.isEligible,
+        eligibilityReason: eligibility.eligibilityReason,
+      };
+    }) ?? [];
+
+  const defaultParent =
+    parentUser === null
+      ? null
+      : {
+          name: parentUser.name,
+          email: parentUser.email,
+          phone: parentUser.phone,
+        };
+
+  const activeMembership = hasActiveMembership(parentUser?.membership ?? null);
+
+  const singleChildPriceSummary = calculateBookingPrice({
+    session,
+    membership: parentUser?.membership ?? null,
+    childCount: 1,
+  });
+
+  const hasMemberPrice = session.memberPricePence !== null;
+  const memberPriceWillApply =
+    activeMembership && singleChildPriceSummary.pricingType === "MEMBER";
 
   return (
     <main className="min-h-(--min-page-height)">
-      <section className="mx-auto max-w-5xl px-6 py-8">
+      <section className="mx-auto max-w-6xl px-6 py-8">
         <div className="pt-0 sm:pt-10">
           <Breadcrumbs
             items={[
@@ -102,6 +233,57 @@ export default async function BookingPage({
           </Alert>
         ) : null}
 
+        {hasMemberPrice && !memberPriceWillApply ? (
+          <Alert className="mt-6">
+            <h2 className="text-lg font-semibold">
+              Members pay {formatPrice(session.memberPricePence!)} per child
+            </h2>
+
+            {!parentUser ? (
+              <p className="mt-2 text-sm">
+                Log in or create a parent account with an active membership to
+                get the member price.{" "}
+                <Link href="/account/login" className="font-medium underline">
+                  Log in
+                </Link>{" "}
+                or{" "}
+                <Link
+                  href="/account/register"
+                  className="font-medium underline"
+                >
+                  create an account
+                </Link>
+                .
+              </p>
+            ) : (
+              <p className="mt-2 text-sm">
+                Start or manage your membership to unlock member pricing for
+                this session.{" "}
+                <Link
+                  href="/account/membership"
+                  className="font-medium underline"
+                >
+                  View membership
+                </Link>
+                .
+              </p>
+            )}
+          </Alert>
+        ) : null}
+
+        {memberPriceWillApply ? (
+          <Alert className="mt-6" variant="success">
+            <h2 className="text-md font-semibold">Member price applied</h2>
+            <p className="mt-2 text-sm">
+              Your active membership means you will pay{" "}
+              <span className="font-semibold">
+                {formatPrice(singleChildPriceSummary.unitPricePence)}
+              </span>{" "}
+              per child for this session.
+            </p>
+          </Alert>
+        ) : null}
+
         <div className="mb-2 mt-12 flex flex-col-reverse gap-6 md:flex-row">
           <Card
             disabled={!availability.canBook}
@@ -116,10 +298,16 @@ export default async function BookingPage({
             <BookingForm
               venueId={venueId}
               sessionId={session.id}
-              pricePence={session.pricePence}
+              pricePence={singleChildPriceSummary.unitPricePence}
+              standardPricePence={session.pricePence}
+              memberPricePence={session.memberPricePence}
+              pricingType={singleChildPriceSummary.pricingType}
               spacesRemaining={availability.spacesRemaining}
-              minAgeYears={session.minAge || 1}
+              minAgeYears={minAgeYears}
               maxAgeYears={session.maxAge}
+              defaultParent={defaultParent}
+              savedChildren={savedChildren}
+              addChildHref={addChildHref}
             />
           </Card>
 
@@ -128,7 +316,7 @@ export default async function BookingPage({
 
             <SummaryRow
               label="Age range"
-              value={`${formatAgeRange(session.minAge || 1, session.maxAge)} years`}
+              value={`${formatAgeRange(minAgeYears, session.maxAge)} years`}
             />
             <SummaryRow label="Venue" value={session.venue.name} />
             <SummaryRow label="Session" value={session.title} />
@@ -139,18 +327,31 @@ export default async function BookingPage({
                 session.endsAt,
               )}`}
             />
+
             <SummaryRow
-              label="Price"
+              label="Standard price"
               value={`${formatPrice(session.pricePence)} per child`}
             />
+
+            {session.memberPricePence !== null ? (
+              <SummaryRow
+                label="Member price"
+                value={`${formatPrice(session.memberPricePence)} per child`}
+              />
+            ) : null}
+
+            <SummaryRow
+              label="Price applied"
+              value={`${formatPrice(singleChildPriceSummary.unitPricePence)} per child`}
+            />
+
             <SummaryRow
               label="Spaces left"
               value={`${availability.spacesRemaining} of ${session.capacity}`}
             />
 
             <p className="text-(--color-danger) text-xs">
-              Bookings cannot be cancelled 24 hours before the session start
-              time.
+              Bookings and cancellations close at 6pm the day before the session.
             </p>
           </Card>
         </div>

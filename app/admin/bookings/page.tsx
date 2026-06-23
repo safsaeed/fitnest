@@ -20,6 +20,14 @@ type AdminBookingsPageProps = {
   }>;
 };
 
+function getPricingLabel(pricingType: string) {
+  return pricingType === "MEMBER" ? "Member price" : "Standard price";
+}
+
+function getBookingSourceLabel(parentUserId: string | null) {
+  return parentUserId ? "Account" : "Guest";
+}
+
 export default async function AdminBookingsPage({
   searchParams,
 }: AdminBookingsPageProps) {
@@ -42,6 +50,28 @@ export default async function AdminBookingsPage({
                 mode: "insensitive",
               },
             },
+            {
+              parentName: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              parentUser: {
+                email: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+            {
+              parentUser: {
+                name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
           ],
         }
       : undefined,
@@ -55,12 +85,29 @@ export default async function AdminBookingsPage({
         },
       },
       children: true,
+      parentUser: {
+        include: {
+          membership: true,
+        },
+      },
     },
   });
 
+  const totalRevenuePence = bookings
+    .filter((booking) => booking.paymentStatus === "PAID")
+    .reduce((total, booking) => total + booking.totalAmountPence, 0);
+
+  const memberPricedBookingCount = bookings.filter(
+    (booking) => booking.pricingType === "MEMBER",
+  ).length;
+
+  const accountBookingCount = bookings.filter(
+    (booking) => booking.parentUserId,
+  ).length;
+
   return (
     <main className="min-h-(--min-page-height)">
-      <section className="mx-auto max-w-5xl px-6 py-8">
+      <section className="mx-auto max-w-6xl px-6 py-8">
         <div className="pb-10 sm:py-10">
           <Breadcrumbs
             items={[
@@ -88,6 +135,42 @@ export default async function AdminBookingsPage({
           </ButtonLink>
         </div>
 
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+          <Card className="sm:py-4 sm:px-4">
+            <p className="text-sm text-(--color-text-secondary)">Bookings</p>
+            <p className="text-lg font-semibold text-(--color-brand)">
+              {bookings.length}
+            </p>
+          </Card>
+
+          <Card className="sm:py-4 sm:px-4">
+            <p className="text-sm text-(--color-text-secondary)">
+              Account bookings
+            </p>
+            <p className="text-lg font-semibold text-(--color-brand)">
+              {accountBookingCount}
+            </p>
+          </Card>
+
+          <Card className="sm:py-4 sm:px-4">
+            <p className="text-sm text-(--color-text-secondary)">
+              Member-priced bookings
+            </p>
+            <p className="text-lg font-semibold text-(--color-brand)">
+              {memberPricedBookingCount}
+            </p>
+          </Card>
+
+          <Card className="sm:py-4 sm:px-4 sm:col-span-3">
+            <p className="text-sm text-(--color-text-secondary)">
+              Paid revenue in this view
+            </p>
+            <p className="text-lg font-semibold text-(--color-brand)">
+              {formatPrice(totalRevenuePence)}
+            </p>
+          </Card>
+        </div>
+
         <form
           action="/admin/bookings"
           method="GET"
@@ -105,7 +188,7 @@ export default async function AdminBookingsPage({
               name="search"
               type="search"
               defaultValue={search}
-              placeholder="Search by reference or email"
+              placeholder="Search by reference, parent name or email"
               className="pl-9"
             />
           </div>
@@ -172,6 +255,28 @@ export default async function AdminBookingsPage({
                   }
                 />
 
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700">
+                    {getBookingSourceLabel(booking.parentUserId)} booking
+                  </span>
+
+                  <span
+                    className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                      booking.pricingType === "MEMBER"
+                        ? "border-green-200 bg-green-50 text-green-800"
+                        : "border-gray-200 bg-gray-50 text-gray-700"
+                    }`}
+                  >
+                    {getPricingLabel(booking.pricingType)}
+                  </span>
+
+                  {booking.parentUser?.membership ? (
+                    <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800">
+                      Membership: {booking.parentUser.membership.status}
+                    </span>
+                  ) : null}
+                </div>
+
                 <AdminListMeta>
                   <AdminListMetaItem
                     label={booking.session.venue.name}
@@ -189,10 +294,32 @@ export default async function AdminBookingsPage({
                   />
 
                   <AdminListMetaItem
-                    label="Payment"
+                    label="Unit price"
+                    value={formatPrice(booking.unitPricePence)}
+                  />
+
+                  <AdminListMetaItem
+                    label="Total"
                     value={<div>{formatPrice(booking.totalAmountPence)}</div>}
                   />
+
+                  <AdminListMetaItem
+                    label="Payment"
+                    value={booking.paymentStatus}
+                  />
                 </AdminListMeta>
+
+                {booking.parentUserId ? (
+                  <div className="mt-4">
+                    <ButtonLink
+                      href={`/admin/parents/${booking.parentUserId}`}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      View parent account
+                    </ButtonLink>
+                  </div>
+                ) : null}
               </AdminListCard>
             ))
           )}
