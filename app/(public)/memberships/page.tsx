@@ -15,9 +15,9 @@ import { Card } from "@/components/ui/card";
 const membershipBenefits = [
   {
     icon: CirclePoundSterling,
-    title: "All FitNest Studios. One Membership",
+    title: "All venues, one membership",
     description:
-      "Use your membership at any venue and enjoy discounted prices.",
+      "Use your membership at any FitNest venue and enjoy discounted prices.",
   },
   {
     icon: UsersRound,
