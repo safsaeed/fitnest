@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/form-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { formatDateInputValue } from "@/lib/date-time";
+import { WEEKDAYS } from "@/lib/session-series";
 import type { Venue } from "@prisma/client";
 import { Info } from "lucide-react";
 import { useState } from "react";
@@ -30,11 +31,11 @@ function getErrorMessage(error?: string) {
   }
 
   if (error === "invalid-date-range") {
-    return "Last session date must be after the first session date.";
+    return "Schedule end date cannot be before the schedule start date.";
   }
 
-  if (error === "invalid-repeat-pattern") {
-    return "Please select a valid repeat pattern.";
+  if (error === "invalid-weekdays") {
+    return "Please select at least one day of the week.";
   }
 
   if (error === "start-in-past") {
@@ -66,11 +67,11 @@ function getErrorMessage(error?: string) {
   }
 
   if (error === "no-sessions") {
-    return "No sessions could be created for that date range.";
+    return "No selected weekday falls within that schedule date range.";
   }
 
   if (error === "too-many-sessions") {
-    return "Too many sessions would be created. Please use a shorter date range.";
+    return "A repeating series can contain up to 365 sessions. Please use a shorter date range or select fewer weekdays.";
   }
 
   return null;
@@ -191,7 +192,7 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
           ) : (
             <>
               <InputField
-                label="First session date"
+                label="Schedule start date"
                 id="startsOn"
                 name="startsOn"
                 hint="New sessions cannot be created in the past."
@@ -201,7 +202,7 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
               />
 
               <InputField
-                label="Last session date"
+                label="Schedule end date"
                 id="endsOn"
                 name="endsOn"
                 type="date"
@@ -226,26 +227,37 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
                 hint="End time must be after the start time."
               />
 
-              <div className="sm:col-span-2">
-                <label
-                  htmlFor="repeatPattern"
-                  className="block text-sm font-medium text-(--color-text-secondary)"
-                >
-                  Repeat pattern
-                </label>
-                <select
-                  id="repeatPattern"
-                  name="repeatPattern"
-                  defaultValue="weekly"
-                  required={mode === "repeating"}
-                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none border-(--color-brand) bg-white text-(--color-text-secondary)"
-                >
-                  <option value="daily">Every day</option>
-                  <option value="every-other-day">Every other day</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="every-other-week">Every other week</option>
-                </select>
-              </div>
+              <fieldset className="sm:col-span-2">
+                <legend className="block text-sm font-medium text-(--color-text-secondary)">
+                  Repeat weekly on{" "}
+                  <span className="text-(--color-danger)">*</span>
+                </legend>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                  {WEEKDAYS.map((weekday) => (
+                    <label
+                      key={weekday.value}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-(--color-brand-border) bg-white px-3 py-2 text-sm text-(--color-text-secondary) hover:bg-(--color-brand-soft)"
+                    >
+                      <input
+                        type="checkbox"
+                        name="weekdays"
+                        value={weekday.value}
+                        className="h-4 w-4 accent-(--color-brand)"
+                      />
+                      <span className="sm:hidden lg:inline">
+                        {weekday.label}
+                      </span>
+                      <span className="hidden sm:inline lg:hidden">
+                        {weekday.shortLabel}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-(--color-text-muted)">
+                  Sessions are created on each selected day through the
+                  schedule end date.
+                </p>
+              </fieldset>
             </>
           )}
 

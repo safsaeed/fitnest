@@ -53,12 +53,15 @@ export function SessionDateSelector({
   const canGoForward = weekStartDateKey < lastWeekStartDateKey;
 
   return (
-    <div className="rounded-lg border border-gray-100 bg-(--color-brand-soft) px-3 py-1">
+    <div className="rounded-lg border border-gray-100 bg-(--color-brand-soft) p-1 relative">
+
+      <span className="sm:hidden text-xs text-(--color-text-secondary) absolute right-4 top-[-20]">Swipe to explore the week</span>
+
       <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="secondary"
           size="custom"
-          className="h-11 w-11 shrink-0 p-0"
+          className="w-9 p-0 self-stretch"
           aria-label="Previous week"
           disabled={!canGoBack}
           onClick={() => onChangeWeek(shiftDateKey(weekStartDateKey, -7))}
@@ -113,7 +116,7 @@ export function SessionDateSelector({
         <Button
           variant="secondary"
           size="custom"
-          className="h-11 w-11 shrink-0 p-0"
+          className="w-9 p-0 self-stretch"
           aria-label="Next week"
           disabled={!canGoForward}
           onClick={() => onChangeWeek(shiftDateKey(weekStartDateKey, 7))}

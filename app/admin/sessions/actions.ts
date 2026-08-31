@@ -9,7 +9,6 @@ import {
   type AdminDeletionResult,
 } from "@/lib/admin-deletion";
 import {
-  addDays,
   combineDateAndTime,
   getNowWithoutSeconds,
 } from "@/lib/date-time";
@@ -19,6 +18,7 @@ import {
   getFormNumber,
   getFormString,
 } from "@/lib/form-data";
+import { getWeeklySessionDates, WEEKDAYS } from "@/lib/session-series";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -35,13 +35,11 @@ const MAX_ALLOWED_AGE = 18;
 const MAX_TITLE_LENGTH = 100;
 const MAX_DESCRIPTION_LENGTH = 1000;
 
-const MAX_BULK_SESSIONS = 100;
-const REPEAT_PATTERNS = [
-  "daily",
-  "every-other-day",
-  "weekly",
-  "every-other-week",
-] as const;
+const MAX_BULK_SESSIONS = 366;
+const WEEKLY_REPEAT_PATTERN = "weekly";
+const VALID_WEEKDAYS = new Set<number>(
+  WEEKDAYS.map((weekday) => weekday.value),
+);
 
 function isWholeNumber(value: number) {
   return Number.isInteger(value);
@@ -64,37 +62,6 @@ function isValidAge(age: number | null) {
     age === null ||
     (isWholeNumber(age) && age >= MIN_ALLOWED_AGE && age <= MAX_ALLOWED_AGE)
   );
-}
-
-function getDatesBetween({
-  startsOn,
-  endsOn,
-  repeatPattern,
-}: {
-  startsOn: Date;
-  endsOn: Date;
-  repeatPattern: string;
-}) {
-  const dates: Date[] = [];
-  let current = new Date(startsOn);
-
-  const intervalDays =
-    repeatPattern === "daily"
-      ? 1
-      : repeatPattern === "every-other-day"
-        ? 2
-        : repeatPattern === "weekly"
-          ? 7
-          : repeatPattern === "every-other-week"
-            ? 14
-            : 7;
-
-  while (current <= endsOn) {
-    dates.push(new Date(current));
-    current = addDays(current, intervalDays);
-  }
-
-  return dates;
 }
 
 function validateCommonSessionFields({
@@ -259,7 +226,11 @@ function getRepeatingSessionInput(formData: FormData) {
 
   const startTime = getFormString(formData, "startTime");
   const endTime = getFormString(formData, "endTime");
-  const repeatPattern = getFormString(formData, "repeatPattern");
+  const weekdays = formData
+    .getAll("weekdays")
+    .map((weekday) =>
+      typeof weekday === "string" ? Number(weekday) : Number.NaN,
+    );
 
   const capacity = getFormNumber(formData, "capacity") ?? 10;
   const pricePounds = getFormNumber(formData, "pricePounds") ?? 10;
@@ -275,7 +246,7 @@ function getRepeatingSessionInput(formData: FormData) {
     endsOn,
     startTime,
     endTime,
-    repeatPattern,
+    weekdays,
     capacity,
     pricePounds,
     memberPricePounds,
@@ -366,22 +337,38 @@ async function createRepeatingSessionsFromForm(
     !input.startsOn ||
     !input.endsOn ||
     !input.startTime ||
-    !input.endTime ||
-    !input.repeatPattern
+    !input.endTime
   ) {
     redirect("/admin/sessions/new?error=missing-required");
   }
 
-  if (!(REPEAT_PATTERNS as readonly string[]).includes(input.repeatPattern)) {
-    redirect("/admin/sessions/new?error=invalid-repeat-pattern");
+  if (
+    input.weekdays.length === 0 ||
+    input.weekdays.some((weekday) => !VALID_WEEKDAYS.has(weekday))
+  ) {
+    redirect("/admin/sessions/new?error=invalid-weekdays");
   }
 
   if (input.endsOn < input.startsOn) {
     redirect("/admin/sessions/new?error=invalid-date-range");
   }
 
-  const firstStartsAt = combineDateAndTime(input.startsOn, input.startTime);
-  const firstEndsAt = combineDateAndTime(input.startsOn, input.endTime);
+  const sessionDates = getWeeklySessionDates({
+    startsOn: input.startsOn,
+    endsOn: input.endsOn,
+    weekdays: input.weekdays,
+  });
+
+  if (sessionDates.length === 0) {
+    redirect("/admin/sessions/new?error=no-sessions");
+  }
+
+  if (sessionDates.length > MAX_BULK_SESSIONS) {
+    redirect("/admin/sessions/new?error=too-many-sessions");
+  }
+
+  const firstStartsAt = combineDateAndTime(sessionDates[0], input.startTime);
+  const firstEndsAt = combineDateAndTime(sessionDates[0], input.endTime);
 
   if (!firstStartsAt || !firstEndsAt) {
     redirect("/admin/sessions/new?error=missing-required");
@@ -393,20 +380,6 @@ async function createRepeatingSessionsFromForm(
 
   if (firstEndsAt <= firstStartsAt) {
     redirect("/admin/sessions/new?error=invalid-dates");
-  }
-
-  const sessionDates = getDatesBetween({
-    startsOn: input.startsOn,
-    endsOn: input.endsOn,
-    repeatPattern: input.repeatPattern,
-  });
-
-  if (sessionDates.length === 0) {
-    redirect("/admin/sessions/new?error=no-sessions");
-  }
-
-  if (sessionDates.length > MAX_BULK_SESSIONS) {
-    redirect("/admin/sessions/new?error=too-many-sessions");
   }
 
   const standardPricePence = pricePoundsToPence(input.pricePounds);
@@ -439,7 +412,7 @@ async function createRepeatingSessionsFromForm(
     const series = await transaction.sessionSeries.create({
       data: {
         title: input.title,
-        repeatPattern: input.repeatPattern,
+        repeatPattern: WEEKLY_REPEAT_PATTERN,
         startsOn: input.startsOn!,
         endsOn: input.endsOn!,
       },
