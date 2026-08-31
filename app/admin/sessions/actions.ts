@@ -1,6 +1,13 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getAdminSession } from "@/lib/auth";
+import {
+  isAuthorizedAdmin,
+  safelyDeleteSession,
+  safelyDeleteSessionSeries,
+  type AdminDeletionResult,
+} from "@/lib/admin-deletion";
 import {
   addDays,
   combineDateAndTime,
@@ -14,6 +21,7 @@ import {
 } from "@/lib/form-data";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 
 const MIN_CAPACITY = 1;
 const MAX_CAPACITY = 500;
@@ -28,6 +36,12 @@ const MAX_TITLE_LENGTH = 100;
 const MAX_DESCRIPTION_LENGTH = 1000;
 
 const MAX_BULK_SESSIONS = 100;
+const REPEAT_PATTERNS = [
+  "daily",
+  "every-other-day",
+  "weekly",
+  "every-other-week",
+] as const;
 
 function isWholeNumber(value: number) {
   return Number.isInteger(value);
@@ -270,6 +284,24 @@ function getRepeatingSessionInput(formData: FormData) {
   };
 }
 
+function getSeriesEditInput(formData: FormData) {
+  return {
+    venueId: getFormString(formData, "venueId"),
+    title: getFormString(formData, "title"),
+    description: getFormString(formData, "description"),
+    startTime: getFormString(formData, "startTime"),
+    endTime: getFormString(formData, "endTime"),
+    capacity: getFormNumber(formData, "capacity") ?? 10,
+    pricePounds: getFormNumber(formData, "pricePounds") ?? 10,
+    memberPricePounds: getFormNumber(formData, "memberPricePounds"),
+    minAge: getFormNumber(formData, "minAge"),
+    maxAge: getFormNumber(formData, "maxAge"),
+    isActive: getFormBoolean(formData, "isActive"),
+    scope:
+      getFormString(formData, "scope") === "upcoming" ? "upcoming" : "all",
+  } as const;
+}
+
 function pricePoundsToPence(pricePounds: number) {
   return Math.round(pricePounds * 100);
 }
@@ -340,6 +372,10 @@ async function createRepeatingSessionsFromForm(
     redirect("/admin/sessions/new?error=missing-required");
   }
 
+  if (!(REPEAT_PATTERNS as readonly string[]).includes(input.repeatPattern)) {
+    redirect("/admin/sessions/new?error=invalid-repeat-pattern");
+  }
+
   if (input.endsOn < input.startsOn) {
     redirect("/admin/sessions/new?error=invalid-date-range");
   }
@@ -399,8 +435,25 @@ async function createRepeatingSessionsFromForm(
     };
   });
 
-  await prisma.session.createMany({
-    data: sessionsToCreate,
+  await prisma.$transaction(async (transaction) => {
+    const series = await transaction.sessionSeries.create({
+      data: {
+        title: input.title,
+        repeatPattern: input.repeatPattern,
+        startsOn: input.startsOn!,
+        endsOn: input.endsOn!,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await transaction.session.createMany({
+      data: sessionsToCreate.map((session) => ({
+        ...session,
+        seriesId: series.id,
+      })),
+    });
   });
 
   revalidatePath("/admin/sessions");
@@ -464,6 +517,129 @@ export async function updateSession(
   redirect("/admin/sessions");
 }
 
+export async function updateSessionSeries(
+  seriesId: string,
+  formData: FormData,
+): Promise<void> {
+  const adminSession = await getAdminSession();
+  const editUrl = `/admin/sessions/series/${seriesId}/edit`;
+
+  if (
+    !(await isAuthorizedAdmin(prisma, adminSession?.adminUserId ?? null))
+  ) {
+    redirect(`${editUrl}?error=unauthorized`);
+  }
+
+  if (!z.cuid().safeParse(seriesId).success) {
+    redirect(`${editUrl}?error=not-found`);
+  }
+
+  const input = getSeriesEditInput(formData);
+  const commonError = validateCommonSessionFields(input);
+
+  if (commonError) {
+    redirect(`${editUrl}?error=${commonError}`);
+  }
+
+  if (!input.startTime || !input.endTime) {
+    redirect(`${editUrl}?error=missing-required`);
+  }
+
+  const series = await prisma.sessionSeries.findUnique({
+    where: {
+      id: seriesId,
+    },
+    select: {
+      id: true,
+      sessions: {
+        where:
+          input.scope === "upcoming"
+            ? {
+                startsAt: {
+                  gt: new Date(),
+                },
+              }
+            : undefined,
+        orderBy: {
+          startsAt: "asc",
+        },
+        select: {
+          id: true,
+          startsAt: true,
+        },
+      },
+    },
+  });
+
+  if (!series) {
+    redirect(`${editUrl}?error=not-found`);
+  }
+
+  if (series.sessions.length === 0) {
+    redirect(`${editUrl}?error=no-matching-sessions`);
+  }
+
+  const sessionTimes = series.sessions.map((session) => ({
+    id: session.id,
+    startsAt: combineDateAndTime(session.startsAt, input.startTime),
+    endsAt: combineDateAndTime(session.startsAt, input.endTime),
+  }));
+
+  if (
+    sessionTimes.some(
+      (session) =>
+        !session.startsAt ||
+        !session.endsAt ||
+        session.endsAt <= session.startsAt,
+    )
+  ) {
+    redirect(`${editUrl}?error=invalid-dates`);
+  }
+
+  const standardPricePence = pricePoundsToPence(input.pricePounds);
+  const memberPricePence = optionalPricePoundsToPence(input.memberPricePounds);
+
+  try {
+    await prisma.$transaction([
+      prisma.sessionSeries.update({
+        where: {
+          id: seriesId,
+        },
+        data: {
+          title: input.title,
+        },
+      }),
+      ...sessionTimes.map((session) =>
+        prisma.session.update({
+          where: {
+            id: session.id,
+          },
+          data: {
+            venueId: input.venueId,
+            title: input.title,
+            description: input.description || null,
+            startsAt: session.startsAt!,
+            endsAt: session.endsAt!,
+            capacity: input.capacity,
+            pricePence: standardPricePence,
+            memberPricePence,
+            minAge: input.minAge,
+            maxAge: input.maxAge,
+            isActive: input.isActive,
+          },
+        }),
+      ),
+    ]);
+  } catch (error) {
+    console.error("Failed to update session series", error);
+    redirect(`${editUrl}?error=database-error`);
+  }
+
+  revalidatePath("/admin/sessions");
+  revalidatePath(editUrl);
+  redirect("/admin/sessions?seriesUpdated=true");
+}
+
 export async function deactivateSession(sessionId: string): Promise<void> {
   await prisma.session.update({
     where: {
@@ -488,4 +664,61 @@ export async function activateSession(sessionId: string): Promise<void> {
   });
 
   revalidatePath("/admin/sessions");
+}
+
+export async function deleteSession(
+  sessionId: string,
+): Promise<AdminDeletionResult> {
+  const adminSession = await getAdminSession();
+  const targetSession = adminSession
+    ? await prisma.session.findUnique({
+        where: {
+          id: sessionId,
+        },
+        select: {
+          seriesId: true,
+        },
+      })
+    : null;
+  const result = await safelyDeleteSession(
+    prisma,
+    adminSession?.adminUserId ?? null,
+    sessionId,
+  );
+
+  if (result.success) {
+    if (targetSession?.seriesId) {
+      await prisma.sessionSeries.deleteMany({
+        where: {
+          id: targetSession.seriesId,
+          sessions: {
+            none: {},
+          },
+        },
+      });
+    }
+
+    revalidatePath("/admin/sessions");
+    redirect("/admin/sessions?deleted=true");
+  }
+
+  return result;
+}
+
+export async function deleteSessionSeries(
+  seriesId: string,
+): Promise<AdminDeletionResult> {
+  const adminSession = await getAdminSession();
+  const result = await safelyDeleteSessionSeries(
+    prisma,
+    adminSession?.adminUserId ?? null,
+    seriesId,
+  );
+
+  if (result.success) {
+    revalidatePath("/admin/sessions");
+    redirect("/admin/sessions?seriesDeleted=true");
+  }
+
+  return result;
 }

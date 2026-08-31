@@ -2,12 +2,14 @@ type CardProps = React.HTMLAttributes<HTMLDivElement> & {
   children: React.ReactNode;
   className?: string;
   disabled?: boolean;
+  interactive?: boolean;
 };
 
 export function Card({
   children,
   className = "",
   disabled = false,
+  interactive = true,
   ...props
 }: CardProps) {
   return (
@@ -17,7 +19,9 @@ export function Card({
         "w-full h-fit rounded-lg border border-gray-100 bg-white p-4 sm:p-8 shadow-md duration-150",
         disabled
           ? " opacity-60 cursor-not-allowed"
-          : "focus-within:-translate-y-px focus-within:shadow-lg hover:-translate-y-px hover:shadow-lg",
+          : interactive
+            ? "focus-within:-translate-y-px focus-within:shadow-lg hover:-translate-y-px hover:shadow-lg"
+            : "",
         className,
       ]
         .filter(Boolean)
