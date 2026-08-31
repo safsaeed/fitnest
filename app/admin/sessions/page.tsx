@@ -1,30 +1,69 @@
 import { prisma } from "@/lib/prisma";
-import { activateSession, deactivateSession } from "./actions";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { InputField } from "@/components/ui/form-field";
-import {
-  AdminList,
-  AdminListCard,
-  AdminListCardHeader,
-  AdminListMeta,
-  AdminListMetaItem,
-} from "@/components/ui/admin-list";
+import { AdminList } from "@/components/ui/admin-list";
 import { ArrowLeft, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { getBookedChildrenCount } from "@/lib/availability";
-import { formatDateTime, formatPrice } from "@/lib/formatters";
 import { LoadingButtonLink } from "@/components/ui/loading-button-link";
+import { Alert } from "@/components/ui/alert";
+import {
+  StatusViewNav,
+  type StatusViewValue,
+} from "@/components/ui/status-view-nav";
+import type { Prisma } from "@prisma/client";
+import {
+  SessionOccurrenceCard,
+  SessionSeriesCard,
+  type AdminSessionItem,
+  type AdminSessionSeriesSummary,
+} from "./session-list-card";
 
 type SessionStatusFilter = "all" | "active" | "inactive";
 type SessionTimeFilter = "upcoming" | "past" | "all";
+
+function getStatusViewHref({
+  status,
+  search,
+  time,
+  venueId,
+}: {
+  status: SessionStatusFilter;
+  search: string;
+  time: SessionTimeFilter;
+  venueId: string;
+}) {
+  const params = new URLSearchParams();
+
+  if (status !== "active") {
+    params.set("status", status);
+  }
+
+  if (search) {
+    params.set("search", search);
+  }
+
+  if (time !== "upcoming") {
+    params.set("time", time);
+  }
+
+  if (venueId) {
+    params.set("venueId", venueId);
+  }
+
+  const query = params.toString();
+  return query ? `/admin/sessions?${query}` : "/admin/sessions";
+}
 
 type AdminSessionsPageProps = {
   searchParams?: Promise<{
     search?: string;
     status?: SessionStatusFilter;
     time?: SessionTimeFilter;
+    venueId?: string;
+    deleted?: string;
+    seriesDeleted?: string;
+    seriesUpdated?: string;
   }>;
 };
 
@@ -34,77 +73,231 @@ export default async function AdminSessionsPage({
   const query = await searchParams;
 
   const search = query?.search?.trim() ?? "";
-  const status = query?.status ?? "all";
+  const requestedStatus = query?.status;
+  const status: SessionStatusFilter =
+    requestedStatus === "inactive" || requestedStatus === "all"
+      ? requestedStatus
+      : "active";
   const time = query?.time ?? "upcoming";
+  const venueId = query?.venueId?.trim() ?? "";
 
   const now = new Date();
 
-  const sessions = await prisma.session.findMany({
-    where: {
-      ...(search
+  const sessionBaseWhere = {
+    ...(search
+      ? {
+          OR: [
+            {
+              title: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              description: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              venue: {
+                name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+
+    ...(time === "upcoming"
+      ? {
+          startsAt: {
+            gt: now,
+          },
+        }
+      : time === "past"
         ? {
-            OR: [
-              {
-                title: {
-                  contains: search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                description: {
-                  contains: search,
-                  mode: "insensitive",
-                },
-              },
-              {
-                venue: {
-                  name: {
-                    contains: search,
-                    mode: "insensitive",
-                  },
-                },
-              },
-            ],
+            startsAt: {
+              lt: now,
+            },
           }
         : {}),
 
-      ...(status === "active"
-        ? { isActive: true }
-        : status === "inactive"
-          ? { isActive: false }
-          : {}),
+    ...(venueId ? { venueId } : {}),
+  } satisfies Prisma.SessionWhereInput;
 
-      ...(time === "upcoming"
-        ? {
-            startsAt: {
-              gt: now,
-            },
-          }
-        : time === "past"
-          ? {
-              startsAt: {
-                lt: now,
-              },
-            }
-          : {}),
-    },
-    orderBy: {
-      startsAt: "asc",
-    },
-    include: {
-      venue: true,
-      bookings: {
-        where: {
-          status: "CONFIRMED",
+  const [sessions, venues, statusCounts] = await Promise.all([
+    prisma.session.findMany({
+      where: {
+        ...sessionBaseWhere,
+        ...(status === "active"
+          ? { isActive: true }
+          : status === "inactive"
+            ? { isActive: false }
+            : {}),
+      },
+      orderBy: {
+        startsAt: "asc",
+      },
+      include: {
+        venue: true,
+        _count: {
+          select: {
+            bookings: true,
+          },
         },
-        select: {
-          childCount: true,
+        bookings: {
+          where: {
+            status: "CONFIRMED",
+          },
+          select: {
+            childCount: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.venue.findMany({
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+      },
+    }),
+    prisma.session.groupBy({
+      by: ["isActive"],
+      where: sessionBaseWhere,
+      _count: {
+        _all: true,
+      },
+    }),
+  ]);
 
-  const hasFilters = Boolean(search || status !== "all" || time !== "upcoming");
+  const selectedVenue = venues.find((venue) => venue.id === venueId);
+  const activeSessionCount =
+    statusCounts.find((count) => count.isActive)?._count._all ?? 0;
+  const inactiveSessionCount =
+    statusCounts.find((count) => !count.isActive)?._count._all ?? 0;
+  const statusViewItems: Array<{
+    value: StatusViewValue;
+    label: string;
+    count: number;
+    href: string;
+  }> = [
+    {
+      value: "active",
+      label: "Active",
+      count: activeSessionCount,
+      href: getStatusViewHref({
+        status: "active",
+        search,
+        time,
+        venueId,
+      }),
+    },
+    {
+      value: "inactive",
+      label: "Inactive",
+      count: inactiveSessionCount,
+      href: getStatusViewHref({
+        status: "inactive",
+        search,
+        time,
+        venueId,
+      }),
+    },
+    {
+      value: "all",
+      label: "All",
+      count: activeSessionCount + inactiveSessionCount,
+      href: getStatusViewHref({
+        status: "all",
+        search,
+        time,
+        venueId,
+      }),
+    },
+  ];
+
+  const seriesIds = Array.from(
+    new Set(
+      sessions
+        .map((session) => session.seriesId)
+        .filter((seriesId): seriesId is string => Boolean(seriesId)),
+    ),
+  );
+
+  const seriesRecords = seriesIds.length
+    ? await prisma.sessionSeries.findMany({
+        where: {
+          id: {
+            in: seriesIds,
+          },
+        },
+        select: {
+          id: true,
+          title: true,
+          repeatPattern: true,
+          startsOn: true,
+          endsOn: true,
+          _count: {
+            select: {
+              sessions: true,
+            },
+          },
+          sessions: {
+            select: {
+              venueId: true,
+              _count: {
+                select: {
+                  bookings: true,
+                },
+              },
+            },
+          },
+        },
+      })
+    : [];
+
+  const seriesSummaries = new Map<string, AdminSessionSeriesSummary>(
+    seriesRecords.map((series) => [
+      series.id,
+      {
+        id: series.id,
+        title: series.title,
+        repeatPattern: series.repeatPattern,
+        startsOn: series.startsOn,
+        endsOn: series.endsOn,
+        totalSessions: series._count.sessions,
+        bookingCount: series.sessions.reduce(
+          (total, session) => total + session._count.bookings,
+          0,
+        ),
+        venueCount: new Set(series.sessions.map((session) => session.venueId))
+          .size,
+      },
+    ]),
+  );
+
+  const sessionsBySeries = new Map<string, AdminSessionItem[]>();
+
+  for (const session of sessions) {
+    if (!session.seriesId) {
+      continue;
+    }
+
+    const occurrences = sessionsBySeries.get(session.seriesId) ?? [];
+    occurrences.push(session);
+    sessionsBySeries.set(session.seriesId, occurrences);
+  }
+
+  const renderedSeriesIds = new Set<string>();
+
+  const hasFilters = Boolean(
+    search || status !== "active" || time !== "upcoming" || venueId,
+  );
 
   return (
     <main className="min-h-(--min-page-height)">
@@ -122,6 +315,24 @@ export default async function AdminSessionsPage({
           <p className="mt-2 flex items-center gap-2 text-sm text-(--color-text-secondary)">
             Manage session dates, capacity and pricing.
           </p>
+
+          {query?.deleted === "true" ? (
+            <Alert variant="success" className="mt-4">
+              Session deleted.
+            </Alert>
+          ) : null}
+
+          {query?.seriesDeleted === "true" ? (
+            <Alert variant="success" className="mt-4">
+              Session series deleted.
+            </Alert>
+          ) : null}
+
+          {query?.seriesUpdated === "true" ? (
+            <Alert variant="success" className="mt-4">
+              Session series updated.
+            </Alert>
+          ) : null}
 
           <div className="mb-8 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <ButtonLink
@@ -142,11 +353,21 @@ export default async function AdminSessionsPage({
           </div>
         </div>
 
+        <StatusViewNav
+          ariaLabel="Session status views"
+          activeValue={status}
+          items={statusViewItems}
+        />
+
         <form
           action="/admin/sessions"
           method="GET"
-          className="mb-10 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
+          className="mb-10 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3"
         >
+          {status !== "active" ? (
+            <input type="hidden" name="status" value={status} />
+          ) : null}
+
           <div className="relative flex-1">
             <Search
               aria-hidden="true"
@@ -166,26 +387,6 @@ export default async function AdminSessionsPage({
 
           <div className="flex flex-col">
             <label
-              htmlFor="status"
-              className="block text-sm font-medium text-(--color-text-secondary)"
-            >
-              Filter by status
-            </label>
-
-            <select
-              id="status"
-              name="status"
-              defaultValue={status}
-              className="mt-1 h-9.5 cursor-pointer rounded-lg border border-(--color-brand-border) bg-white px-3 py-1 text-sm text-(--color-text-secondary)"
-            >
-              <option value="all">All</option>
-              <option value="active">Active only</option>
-              <option value="inactive">Inactive only</option>
-            </select>
-          </div>
-
-          <div className="flex flex-col">
-            <label
               htmlFor="time"
               className="block text-sm font-medium text-(--color-text-secondary)"
             >
@@ -201,6 +402,30 @@ export default async function AdminSessionsPage({
               <option value="upcoming">Upcoming</option>
               <option value="past">Past</option>
               <option value="all">All dates</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label
+              htmlFor="venueId"
+              className="block text-sm font-medium text-(--color-text-secondary)"
+            >
+              Filter by venue
+            </label>
+
+            <select
+              id="venueId"
+              name="venueId"
+              defaultValue={venueId}
+              className="mt-1 h-9.5 max-w-full cursor-pointer rounded-lg border border-(--color-brand-border) bg-white px-3 py-1 text-sm text-(--color-text-secondary) sm:max-w-56"
+            >
+              <option value="">All venues</option>
+              {venues.map((venue) => (
+                <option key={venue.id} value={venue.id}>
+                  {venue.name}
+                  {venue.isActive ? "" : " (inactive)"}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -234,6 +459,15 @@ export default async function AdminSessionsPage({
                 </span>
               </>
             ) : null}
+            {venueId ? (
+              <>
+                {" "}
+                at{" "}
+                <span className="font-medium text-(--color-text-primary)">
+                  {selectedVenue?.name ?? "an unavailable venue"}
+                </span>
+              </>
+            ) : null}
             .
           </p>
         ) : null}
@@ -241,112 +475,43 @@ export default async function AdminSessionsPage({
         <AdminList>
           {sessions.length === 0 ? (
             <Card>
-              {hasFilters
-                ? "No sessions match your filters."
-                : "No sessions yet."}
+              {search || time !== "upcoming" || venueId
+                ? `No ${status === "all" ? "sessions" : `${status} sessions`} match your filters.`
+                : status === "all"
+                  ? "No sessions yet."
+                  : `No ${status} sessions.`}
             </Card>
           ) : (
             sessions.map((session) => {
-              const bookedChildren = getBookedChildrenCount(session.bookings);
+              if (!session.seriesId) {
+                return (
+                  <SessionOccurrenceCard key={session.id} session={session} />
+                );
+              }
+
+              if (renderedSeriesIds.has(session.seriesId)) {
+                return null;
+              }
+
+              const series = seriesSummaries.get(session.seriesId);
+              const occurrences = sessionsBySeries.get(session.seriesId);
+
+              if (!series || !occurrences) {
+                return (
+                  <SessionOccurrenceCard key={session.id} session={session} />
+                );
+              }
+
+              renderedSeriesIds.add(session.seriesId);
 
               return (
-                <AdminListCard
-                  key={session.id}
-                  className={session.isActive ? "" : "border-(--color-danger)!"}
-                >
-                  <AdminListCardHeader
-                    title={session.title}
-                    subtitle={session.venue.name}
-                    badge={
-                      <span
-                        className={`rounded-md border px-2 py-px text-md font-medium ${
-                          session.isActive
-                            ? "border-(--color-success-soft) bg-(--color-success-soft) text-(--color-success)"
-                            : "border-(--color-danger) bg-(--color-danger-soft) text-(--color-danger)"
-                        }`}
-                      >
-                        {session.isActive ? "Active" : "Inactive"}
-                      </span>
-                    }
-                    actions={
-                      <>
-                        <LoadingButtonLink
-                          href={`/admin/sessions/${session.id}/register`}
-                          className="w-24"
-                        >
-                          Register
-                        </LoadingButtonLink>
-
-                        <LoadingButtonLink
-                          href={`/admin/sessions/${session.id}/edit`}
-                          variant="secondary"
-                          className="w-24"
-                        >
-                          Edit
-                        </LoadingButtonLink>
-
-                        {session.isActive ? (
-                          <ConfirmActionDialog
-                            action={deactivateSession.bind(null, session.id)}
-                            title="Deactivate this session?"
-                            description={`Customers will no longer be able to book "${session.title}" while it is inactive.`}
-                            confirmLabel="Deactivate"
-                          >
-                            Deactivate
-                          </ConfirmActionDialog>
-                        ) : (
-                          <ConfirmActionDialog
-                            action={activateSession.bind(null, session.id)}
-                            title="Activate this session?"
-                            description={`Customers will be able to book "${session.title}" again if it has availability.`}
-                            confirmLabel="Activate"
-                          >
-                            Activate
-                          </ConfirmActionDialog>
-                        )}
-                      </>
-                    }
-                  />
-
-                  <AdminListMeta>
-                    <AdminListMetaItem
-                      label="Date/ Time"
-                      value={
-                        <>
-                          <p>{formatDateTime(session.startsAt)}</p>
-                          <p className="text-xs text-(--color-text-secondary)">
-                            {formatDateTime(session.endsAt)}
-                          </p>
-                        </>
-                      }
-                    />
-
-                    <AdminListMetaItem
-                      label="Ages"
-                      value={`${session.minAge !== null ? session.minAge : "—"}–
-                      ${session.maxAge !== null ? session.maxAge : "—"}`}
-                    />
-
-                    <AdminListMetaItem
-                      label="Booked"
-                      value={`${bookedChildren} / ${session.capacity}`}
-                    />
-
-                    <AdminListMetaItem
-                      label="Standard price"
-                      value={formatPrice(session.pricePence)}
-                    />
-
-                    <AdminListMetaItem
-                      label="Member price"
-                      value={
-                        session.memberPricePence !== null
-                          ? formatPrice(session.memberPricePence)
-                          : "—"
-                      }
-                    />
-                  </AdminListMeta>
-                </AdminListCard>
+                <SessionSeriesCard
+                  key={session.seriesId}
+                  series={series}
+                  occurrences={occurrences}
+                  filteredVenueName={selectedVenue?.name}
+                  filteredStatus={status === "all" ? undefined : status}
+                />
               );
             })
           )}

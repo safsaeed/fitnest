@@ -33,6 +33,10 @@ function getErrorMessage(error?: string) {
     return "Last session date must be after the first session date.";
   }
 
+  if (error === "invalid-repeat-pattern") {
+    return "Please select a valid repeat pattern.";
+  }
+
   if (error === "start-in-past") {
     return "New sessions cannot start in the past.";
   }
@@ -306,7 +310,7 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
         <p className="mt-6 text-xs p-3 bg-(--color-brand-soft) text-(--color-text-secondary) rounded-lg flex items-center gap-2">
           <Info className="text-(--color-brand) min-w-4 w-4 h-4" />
           {mode === "repeating"
-            ? "This will create individual sessions using the selected repeat pattern. Each generated session can still be edited or deactivated separately."
+            ? "This creates a managed series. You can edit shared series details later, while each occurrence can still be edited or deleted separately."
             : "This will create an active session, it can be deactivated separately."}
         </p>
 

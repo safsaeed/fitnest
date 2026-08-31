@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { activateVenue, deactivateVenue } from "./actions";
+import { activateVenue, deactivateVenue, deleteVenue } from "./actions";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
@@ -12,13 +12,41 @@ import {
 import { InputField } from "@/components/ui/form-field";
 import { Card } from "@/components/ui/card";
 import { LoadingButtonLink } from "@/components/ui/loading-button-link";
+import { Alert } from "@/components/ui/alert";
+import {
+  StatusViewNav,
+  type StatusViewValue,
+} from "@/components/ui/status-view-nav";
+import type { Prisma } from "@prisma/client";
 
 type VenueStatusFilter = "all" | "active" | "inactive";
+
+function getStatusViewHref({
+  status,
+  search,
+}: {
+  status: VenueStatusFilter;
+  search: string;
+}) {
+  const params = new URLSearchParams();
+
+  if (status !== "active") {
+    params.set("status", status);
+  }
+
+  if (search) {
+    params.set("search", search);
+  }
+
+  const query = params.toString();
+  return query ? `/admin/venues?${query}` : "/admin/venues";
+}
 
 type AdminVenuesPageProps = {
   searchParams?: Promise<{
     search?: string;
     status?: VenueStatusFilter;
+    deleted?: string;
   }>;
 };
 
@@ -27,59 +55,105 @@ export default async function AdminVenuesPage({
 }: AdminVenuesPageProps) {
   const query = await searchParams;
   const search = query?.search?.trim() ?? "";
-  const status = query?.status ?? "all";
+  const requestedStatus = query?.status;
+  const status: VenueStatusFilter =
+    requestedStatus === "inactive" || requestedStatus === "all"
+      ? requestedStatus
+      : "active";
 
-  const venues = await prisma.venue.findMany({
-    where: {
-      ...(search
-        ? {
-            OR: [
-              {
-                name: {
-                  contains: search,
-                  mode: "insensitive",
-                },
+  const venueBaseWhere = {
+    ...(search
+      ? {
+          OR: [
+            {
+              name: {
+                contains: search,
+                mode: "insensitive",
               },
-              {
-                city: {
-                  contains: search,
-                  mode: "insensitive",
-                },
+            },
+            {
+              city: {
+                contains: search,
+                mode: "insensitive",
               },
-              {
-                postcode: {
-                  contains: search,
-                  mode: "insensitive",
-                },
+            },
+            {
+              postcode: {
+                contains: search,
+                mode: "insensitive",
               },
-            ],
-          }
-        : {}),
+            },
+          ],
+        }
+      : {}),
+  } satisfies Prisma.VenueWhereInput;
 
-      ...(status === "active"
-        ? { isActive: true }
-        : status === "inactive"
-          ? { isActive: false }
-          : {}),
-    },
-    orderBy: [
-      {
-        isActive: "desc",
+  const [venues, statusCounts] = await Promise.all([
+    prisma.venue.findMany({
+      where: {
+        ...venueBaseWhere,
+        ...(status === "active"
+          ? { isActive: true }
+          : status === "inactive"
+            ? { isActive: false }
+            : {}),
       },
-      {
-        name: "asc",
-      },
-    ],
-    include: {
-      _count: {
-        select: {
-          sessions: true,
+      orderBy: [
+        {
+          isActive: "desc",
+        },
+        {
+          name: "asc",
+        },
+      ],
+      include: {
+        _count: {
+          select: {
+            sessions: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.venue.groupBy({
+      by: ["isActive"],
+      where: venueBaseWhere,
+      _count: {
+        _all: true,
+      },
+    }),
+  ]);
 
-  const hasFilters = Boolean(search || status !== "all");
+  const activeVenueCount =
+    statusCounts.find((count) => count.isActive)?._count._all ?? 0;
+  const inactiveVenueCount =
+    statusCounts.find((count) => !count.isActive)?._count._all ?? 0;
+  const statusViewItems: Array<{
+    value: StatusViewValue;
+    label: string;
+    count: number;
+    href: string;
+  }> = [
+    {
+      value: "active",
+      label: "Active",
+      count: activeVenueCount,
+      href: getStatusViewHref({ status: "active", search }),
+    },
+    {
+      value: "inactive",
+      label: "Inactive",
+      count: inactiveVenueCount,
+      href: getStatusViewHref({ status: "inactive", search }),
+    },
+    {
+      value: "all",
+      label: "All",
+      count: activeVenueCount + inactiveVenueCount,
+      href: getStatusViewHref({ status: "all", search }),
+    },
+  ];
+
+  const hasFilters = Boolean(search || status !== "active");
 
   return (
     <main className="min-h-(--min-page-height)">
@@ -97,6 +171,12 @@ export default async function AdminVenuesPage({
           <p className="mt-2 flex items-center gap-2 text-sm text-(--color-text-secondary)">
             Manage partner sports venues.
           </p>
+
+          {query?.deleted === "true" ? (
+            <Alert variant="success" className="mt-4">
+              Venue deleted.
+            </Alert>
+          ) : null}
 
           <div className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-6">
             <ButtonLink
@@ -117,11 +197,21 @@ export default async function AdminVenuesPage({
           </div>
         </div>
 
+        <StatusViewNav
+          ariaLabel="Venue status views"
+          activeValue={status}
+          items={statusViewItems}
+        />
+
         <form
           action="/admin/venues"
           method="GET"
           className="flex gap-1.5 sm:gap-3 mb-10 flex-col sm:flex-row sm:items-center"
         >
+          {status !== "active" ? (
+            <input type="hidden" name="status" value={status} />
+          ) : null}
+
           <div className="relative flex-1">
             <Search
               aria-hidden="true"
@@ -137,26 +227,6 @@ export default async function AdminVenuesPage({
               placeholder="Search by name, city or postcode"
               className="pl-9"
             />
-          </div>
-
-          <div className="flex flex-col">
-            <label
-              htmlFor="status"
-              className="block text-sm font-medium text-(--color-text-secondary)"
-            >
-              Filter by status
-            </label>
-
-            <select
-              id="status"
-              name="status"
-              defaultValue={status}
-              className="mt-1 rounded-lg border border-(--color-brand-border) text-(--color-text-secondary) cursor-pointer bg-white px-3 py-1 text-sm h-9.5"
-            >
-              <option value="all">All</option>
-              <option value="active">Active only</option>
-              <option value="inactive">Inactive only</option>
-            </select>
           </div>
 
           <div className="self-end space-x-1.5 sm:space-x-3 mt-4 sm:mt-0">
@@ -192,7 +262,11 @@ export default async function AdminVenuesPage({
         <AdminList>
           {venues.length === 0 ? (
             <Card>
-              {hasFilters ? "No venues match your filters." : "No venues yet."}
+              {search
+                ? `No ${status === "all" ? "venues" : `${status} venues`} match your search.`
+                : status === "all"
+                  ? "No venues yet."
+                  : `No ${status} venues.`}
             </Card>
           ) : (
             venues.map((venue) => (
@@ -272,6 +346,44 @@ export default async function AdminVenuesPage({
                         >
                           Activate
                         </ConfirmActionDialog>
+                      )}
+
+                      {venue._count.sessions === 0 ? (
+                        <ConfirmActionDialog
+                          action={deleteVenue.bind(null, venue.id)}
+                          title="Delete venue?"
+                          description={
+                            <div className="space-y-3">
+                              <p className="font-medium text-(--color-text-primary)">
+                                {venue.name}
+                              </p>
+                              <p>
+                                This venue has no sessions and can be
+                                permanently deleted.
+                              </p>
+                              <p>This action cannot be undone.</p>
+                            </div>
+                          }
+                          confirmLabel="Delete venue"
+                        >
+                          Delete
+                        </ConfirmActionDialog>
+                      ) : (
+                        <div className="flex flex-col items-start gap-1 relative">
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            className="min-w-25"
+                            disabled
+                            title="Venues with sessions cannot be deleted."
+                          >
+                            Delete
+                          </Button>
+                          <span className="max-w-32 text-xs text-(--color-danger) absolute top-10 right-0">
+                            {venue._count.sessions} session
+                            {venue._count.sessions === 1 ? "" : "s"}
+                          </span>
+                        </div>
                       )}
                     </>
                   }

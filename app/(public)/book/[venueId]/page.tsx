@@ -1,13 +1,16 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionAvailability } from "@/lib/availability";
-import { Button, ButtonLink } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { Card } from "@/components/ui/card";
 import { formatLongDate, formatPrice, formatTime } from "@/lib/formatters";
 import { groupSessionsByType } from "@/lib/session-groups";
-import { CalendarDays, Clock, MapPin, ArrowLeft } from "lucide-react";
-import { LoadingButtonLink } from "@/components/ui/loading-button-link";
+import { getLocalDateKey } from "@/lib/session-dates";
+import { MapPin, ArrowLeft } from "lucide-react";
+import {
+  AvailableSessions,
+  type SessionOccurrence,
+} from "./available-sessions";
 
 type VenueSessionsPageProps = {
   params: Promise<{
@@ -54,7 +57,30 @@ export default async function VenueSessionsPage({
     notFound();
   }
 
-  const sessionGroups = groupSessionsByType(venue.sessions);
+  const sessionGroups: SessionOccurrence[][] = groupSessionsByType(
+    venue.sessions,
+  ).map((sessions) =>
+    sessions.map((session) => {
+      const availability = getSessionAvailability(session);
+
+      return {
+        id: session.id,
+        title: session.title,
+        description: session.description,
+        priceLabel: formatPrice(session.pricePence),
+        minAge: session.minAge,
+        maxAge: session.maxAge,
+        dateKey: getLocalDateKey(session.startsAt),
+        dateLabel: formatLongDate(session.startsAt),
+        timeLabel: `${formatTime(session.startsAt)} – ${formatTime(
+          session.endsAt,
+        )}`,
+        spacesRemaining: availability.spacesRemaining,
+        canBook: availability.canBook,
+        availabilityLabel: availability.statusLabel,
+      };
+    }),
+  );
 
   return (
     <main className="min-h-(--min-page-height)">
@@ -96,134 +122,11 @@ export default async function VenueSessionsPage({
         </ButtonLink>
 
         <h2 className="mb-2 mt-6 text-lg">Available sessions</h2>
-
-        <div className="mt-4 grid gap-4">
-          {sessionGroups.length === 0 ? (
-            <p className="text-(--color-text-secondary)">
-              No upcoming sessions are available at this venue.
-            </p>
-          ) : (
-            sessionGroups.map((sessions) => {
-              const firstSession = sessions[0];
-
-              return (
-                <Card
-                  key={`${firstSession.title}-${firstSession.pricePence}`}
-                  className="min-w-full"
-                >
-                  <div className="flex flex-col gap-5">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          {firstSession.title}
-                        </h3>
-
-                        {firstSession.description ? (
-                          <p className="mt-2 text-sm text-(--color-text-secondary)">
-                            {firstSession.description}
-                          </p>
-                        ) : null}
-
-                        {firstSession.minAge || firstSession.maxAge ? (
-                          <p className="mt-1 text-sm text-(--color-text-secondary)">
-                            Ages {firstSession.minAge ?? "-"} to{" "}
-                            {firstSession.maxAge ?? "-"} years
-                          </p>
-                        ) : null}
-
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
-                          <span className="rounded-lg bg-(--color-brand-soft) px-3 py-1 text-xs font-medium text-(--color-brand)">
-                            {sessions.length} upcoming session
-                            {sessions.length !== 1 ? "s" : ""}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="text-left sm:text-right">
-                        <p className="text-(--color-text-secondary)">
-                          <span className="text-lg font-semibold">
-                            {formatPrice(firstSession.pricePence)}
-                          </span>{" "}
-                          <span className="text-xs">per child</span>
-                        </p>
-
-                        <p className="mt-1 text-xs text-(--color-text-muted)">
-                          Bookings close 6pm the day before the session.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      {sessions.map((session) => {
-                        const availability = getSessionAvailability(session);
-
-                        return (
-                          <div
-                            key={session.id}
-                            className={`flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-gray-200 ${availability.canBook ? "" : "opacity-60"}`}
-                          >
-                            <div className="grid gap-2 text-sm text-(--color-text-secondary)">
-                              <p className="flex items-center gap-2">
-                                <CalendarDays
-                                  aria-hidden="true"
-                                  className="h-4 w-4 shrink-0 text-(--color-brand)"
-                                />
-                                <span>{formatLongDate(session.startsAt)}</span>
-                              </p>
-
-                              <p className="flex items-center gap-2">
-                                <Clock
-                                  aria-hidden="true"
-                                  className="h-4 w-4 shrink-0 text-(--color-brand)"
-                                />
-                                <span>
-                                  {formatTime(session.startsAt)} –{" "}
-                                  {formatTime(session.endsAt)}
-                                </span>
-                              </p>
-                            </div>
-
-                            <div className="flex flex-wrap self-end items-center gap-2">
-                              <span
-                                className={`rounded-lg px-3 py-1 text-xs font-medium ${
-                                  availability.spacesRemaining <= 3
-                                    ? "bg-(--color-warning-soft) text-(--color-warning)"
-                                    : "bg-(--color-success-soft) text-(--color-success)"
-                                }`}
-                              >
-                                {availability.spacesRemaining} spaces left
-                              </span>
-
-                              {availability.canBook ? (
-                                <LoadingButtonLink
-                                  href={`/book/${venue.id}/${session.id}`}
-                                  size="sm"
-                                  className="w-22.5"
-                                >
-                                  Book
-                                </LoadingButtonLink>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  disabled
-                                  variant="secondary"
-                                  size="sm"
-                                  className="w-22.5"
-                                >
-                                  Unavailable
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </Card>
-              );
-            })
-          )}
-        </div>
+        <AvailableSessions
+          key={venue.id}
+          venueId={venue.id}
+          sessionGroups={sessionGroups}
+        />
       </section>
     </main>
   );

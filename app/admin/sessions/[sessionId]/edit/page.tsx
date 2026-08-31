@@ -5,6 +5,7 @@ import { SessionForm } from "./session-form";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { ButtonLink } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
 
 type EditSessionPageProps = {
   params: Promise<{
@@ -29,6 +30,7 @@ export default async function EditSessionPage({
       },
       include: {
         venue: true,
+        series: true,
       },
     }),
     prisma.venue.findMany({
@@ -73,6 +75,25 @@ export default async function EditSessionPage({
             </span>
           </ButtonLink>
         </div>
+
+        {session.series ? (
+          <Alert className="mb-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                This is one occurrence in the repeating series “
+                {session.series.title}”. Changes made here affect only this
+                occurrence.
+              </p>
+              <ButtonLink
+                href={`/admin/sessions/series/${session.series.id}/edit`}
+                variant="secondary"
+                className="shrink-0"
+              >
+                Edit series
+              </ButtonLink>
+            </div>
+          </Alert>
+        ) : null}
 
         <SessionForm
           session={session}

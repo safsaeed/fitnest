@@ -1,6 +1,11 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getAdminSession } from "@/lib/auth";
+import {
+  safelyDeleteVenue,
+  type AdminDeletionResult,
+} from "@/lib/admin-deletion";
 import { getFormBoolean, getFormString } from "@/lib/form-data";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -157,4 +162,22 @@ export async function activateVenue(venueId: string): Promise<void> {
   });
 
   revalidatePath("/admin/venues");
+}
+
+export async function deleteVenue(
+  venueId: string,
+): Promise<AdminDeletionResult> {
+  const adminSession = await getAdminSession();
+  const result = await safelyDeleteVenue(
+    prisma,
+    adminSession?.adminUserId ?? null,
+    venueId,
+  );
+
+  if (result.success) {
+    revalidatePath("/admin/venues");
+    redirect("/admin/venues?deleted=true");
+  }
+
+  return result;
 }
