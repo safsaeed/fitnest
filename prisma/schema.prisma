@@ -190,6 +190,9 @@ model Session {
   venueId String
   venue   Venue  @relation(fields: [venueId], references: [id])
 
+  seriesId String?
+  series   SessionSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+
   title       String
   description String?
 
@@ -211,8 +214,26 @@ model Session {
   updatedAt DateTime @updatedAt
 
   @@index([venueId])
+  @@index([seriesId])
   @@index([startsAt])
   @@index([isActive])
+}
+
+model SessionSeries {
+  id String @id @default(cuid())
+
+  title         String
+  repeatPattern String
+  startsOn      DateTime
+  endsOn        DateTime
+
+  sessions Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startsOn])
+  @@index([endsOn])
 }
 
 model Booking {

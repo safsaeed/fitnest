@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 
@@ -10,13 +10,15 @@ type HiddenField = {
 };
 
 type ConfirmActionDialogProps = {
-  action?: () => void | Promise<void>;
+  action?: () =>
+    | void
+    | Promise<void | { success: boolean; message?: string }>;
   formAction?: string;
   formMethod?: "GET" | "POST";
   hiddenFields?: HiddenField[];
   children: React.ReactNode;
   title: string;
-  description: string;
+  description: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
 };
@@ -34,6 +36,8 @@ export function ConfirmActionDialog({
 }: ConfirmActionDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!isOpen) {
@@ -56,40 +60,72 @@ export function ConfirmActionDialog({
   }, [isOpen]);
 
   function handleConfirm() {
-    if (!action) {
+    if (!action || isPending) {
       return;
     }
 
+    setErrorMessage(null);
+
     startTransition(async () => {
-      await action();
-      setIsOpen(false);
+      try {
+        const result = await action();
+
+        if (result && !result.success) {
+          setErrorMessage(
+            result.message ?? "This action could not be completed.",
+          );
+          return;
+        }
+
+        setIsOpen(false);
+      } catch {
+        setErrorMessage("This action could not be completed. Please try again.");
+      }
     });
+  }
+
+  function closeDialog() {
+    if (isPending) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsOpen(false);
   }
 
   const dialog = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-      onClick={() => setIsOpen(false)}
+      onClick={closeDialog}
     >
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-action-title"
+        aria-labelledby={titleId}
         className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 id="confirm-action-title" className="text-lg font-semibold">
+        <h2 id={titleId} className="text-lg font-semibold">
           {title}
         </h2>
 
-        <p className="mt-2 text-sm text-(--color-text-secondary)">
+        <div className="mt-2 text-sm text-(--color-text-secondary)">
           {description}
-        </p>
+        </div>
+
+        {errorMessage ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-md border border-(--color-danger-hover) bg-(--color-danger-soft) px-3 py-2 text-sm text-(--color-danger)"
+          >
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="mt-6 flex justify-end gap-3">
           <Button
             type="button"
-            onClick={() => setIsOpen(false)}
+            onClick={closeDialog}
             disabled={isPending}
             variant="secondary"
           >
@@ -116,9 +152,10 @@ export function ConfirmActionDialog({
               type="button"
               onClick={handleConfirm}
               disabled={isPending}
+              isLoading={isPending}
               variant="destructive"
             >
-              {isPending ? "Working..." : confirmLabel}
+              {confirmLabel}
             </Button>
           )}
         </div>
@@ -130,7 +167,10 @@ export function ConfirmActionDialog({
     <>
       <Button
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setErrorMessage(null);
+          setIsOpen(true);
+        }}
         variant="destructive"
         className="min-w-25"
       >

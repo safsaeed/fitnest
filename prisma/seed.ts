@@ -43,6 +43,7 @@ async function main() {
   await prisma.parentChild.deleteMany();
   await prisma.parentUser.deleteMany();
   await prisma.session.deleteMany();
+  await prisma.sessionSeries.deleteMany();
   await prisma.venue.deleteMany();
   await prisma.venueInterest.deleteMany();
   await prisma.adminUser.deleteMany();
