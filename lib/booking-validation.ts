@@ -1,24 +1,13 @@
 import { z } from "zod";
 import { yearsAgo } from "@/lib/date-time";
 import { getFormString, getOptionalFormString } from "@/lib/form-data";
+import {
+  emergencyContactNameSchema,
+  emergencyContactPhoneSchema,
+  phoneSchema,
+} from "@/lib/validation/contact";
 
 const MAX_CHILDREN_PER_BOOKING = 20;
-
-const phoneSchema = z
-  .string()
-  .trim()
-  .min(7, "Enter a valid phone number.")
-  .max(20, "Phone number is too long.")
-  .regex(/^\+?[0-9() -]+$/, {
-    message:
-      "Enter a valid phone number using numbers, spaces, +, -, or brackets.",
-  })
-  .refine((value) => value.replace(/\D/g, "").length >= 10, {
-    message: "Enter a valid phone number with at least 10 digits.",
-  })
-  .refine((value) => value.replace(/\D/g, "").length <= 15, {
-    message: "Phone number must not have more than 15 digits.",
-  });
 
 const requiredText = ({
   field,
@@ -123,6 +112,10 @@ const bookingFormSchema = z
 
     parentPhone: phoneSchema,
 
+    emergencyContactName: emergencyContactNameSchema,
+
+    emergencyContactPhone: emergencyContactPhoneSchema,
+
     consentAccepted: z.string().refine((value) => value === "on", {
       message: "You must confirm parent / guardian consent before continuing.",
     }),
@@ -216,6 +209,9 @@ export function parseBookingFormData(formData: FormData): BookingFormInput {
     parentName: getFormString(formData, "parentName"),
     parentEmail: getFormString(formData, "parentEmail"),
     parentPhone: getFormString(formData, "parentPhone"),
+
+    emergencyContactName: getFormString(formData, "emergencyContactName"),
+    emergencyContactPhone: getFormString(formData, "emergencyContactPhone"),
 
     consentAccepted: getOptionalFormString(formData, "consentAccepted") ?? "",
     marketingOptIn: getOptionalFormString(formData, "marketingOptIn"),

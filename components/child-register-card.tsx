@@ -3,6 +3,8 @@ export function ChildRegisterCard({
   ageAtSession,
   parentName,
   parentPhone,
+  emergencyContactName,
+  emergencyContactPhone,
   allergies,
   medicalNotes,
 }: {
@@ -49,11 +51,17 @@ export function ChildRegisterCard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4">
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <RegisterInfoBlock
-          label={"Parent"}
+          label="Parent"
           name={parentName}
           phone={parentPhone}
+        />
+        <RegisterInfoBlock
+          label="Emergency contact"
+          name={emergencyContactName ?? ""}
+          phone={emergencyContactPhone}
+          important
         />
       </div>
 
@@ -92,13 +100,21 @@ function RegisterInfoBlock({
   label,
   name,
   phone,
+  important = false,
 }: {
   label: string;
   name: string;
   phone: string | null;
+  important?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+    <div
+      className={`rounded-lg border p-4 ${
+        important
+          ? "border-(--color-warning-border) bg-(--color-warning-soft)"
+          : "border-gray-100 bg-gray-50"
+      }`}
+    >
       <p className="text-xs font-medium uppercase tracking-wide text-(--color-text-secondary)">
         {label}
       </p>

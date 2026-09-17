@@ -1,14 +1,55 @@
-type ChildForStaffing = {
+export type ChildForStaffing = {
   dateOfBirth: Date | null;
 };
 
-type StaffingGroup = {
-  key: "UNDER_2" | "AGE_2" | "AGE_3_PLUS";
+export type StaffingAgeGroupKey = "UNDER_2" | "AGE_2" | "AGE_3_PLUS";
+
+export type StaffingGroup = {
+  key: StaffingAgeGroupKey;
   label: string;
   childCount: number;
   ratio: number;
   fraction: number;
 };
+
+export type StaffingAgeGroupRule = {
+  key: StaffingAgeGroupKey;
+  label: string;
+  minAge: number;
+  maxAge: number | null;
+  ratio: number;
+  unitsPerChild: number;
+};
+
+export const STAFFING_UNITS_PER_STAFF = 120;
+export const STAFF_PER_SESSION = 1;
+
+export const STAFFING_AGE_GROUPS: readonly StaffingAgeGroupRule[] = [
+  {
+    key: "UNDER_2",
+    label: "Under 2",
+    minAge: 0,
+    maxAge: 1,
+    ratio: 3,
+    unitsPerChild: 40,
+  },
+  {
+    key: "AGE_2",
+    label: "Age 2",
+    minAge: 2,
+    maxAge: 2,
+    ratio: 5,
+    unitsPerChild: 24,
+  },
+  {
+    key: "AGE_3_PLUS",
+    label: "Age 3+",
+    minAge: 3,
+    maxAge: null,
+    ratio: 8,
+    unitsPerChild: 15,
+  },
+];
 
 export type StaffingSummary = {
   totalChildren: number;
@@ -17,6 +58,15 @@ export type StaffingSummary = {
   staffingFraction: number;
   label: string;
   groups: StaffingGroup[];
+};
+
+export type StaffingAvailability = {
+  capacityUnits: number;
+  usedUnits: number;
+  remainingUnits: number;
+  isOverCapacity: boolean;
+  bookableAgeGroups: readonly StaffingAgeGroupRule[];
+  maxAdditionalChildren: number;
 };
 
 export function calculateAgeAtDate(dateOfBirth: Date, sessionDate: Date) {
@@ -32,6 +82,150 @@ export function calculateAgeAtDate(dateOfBirth: Date, sessionDate: Date) {
   }
 
   return age;
+}
+
+export function getStaffingAgeGroup(age: number) {
+  if (age < 2) {
+    return STAFFING_AGE_GROUPS[0];
+  }
+
+  if (age === 2) {
+    return STAFFING_AGE_GROUPS[1];
+  }
+
+  return STAFFING_AGE_GROUPS[2];
+}
+
+export function getStaffingUnitsForAge(age: number) {
+  return getStaffingAgeGroup(age).unitsPerChild;
+}
+
+export function calculateStaffingUnits({
+  children,
+  sessionDate,
+}: {
+  children: ChildForStaffing[];
+  sessionDate: Date;
+}) {
+  return children.reduce((total, child) => {
+    if (!child.dateOfBirth) {
+      return total;
+    }
+
+    const age = calculateAgeAtDate(child.dateOfBirth, sessionDate);
+
+    if (!Number.isFinite(age)) {
+      return total;
+    }
+
+    return total + getStaffingUnitsForAge(age);
+  }, 0);
+}
+
+function ageGroupOverlapsSessionRange(
+  group: StaffingAgeGroupRule,
+  minAge: number,
+  maxAge: number | null,
+) {
+  const groupMaxAge = group.maxAge ?? Number.POSITIVE_INFINITY;
+  const sessionMaxAge = maxAge ?? Number.POSITIVE_INFINITY;
+
+  return group.minAge <= sessionMaxAge && groupMaxAge >= minAge;
+}
+
+export function getBookableStaffingAgeGroups({
+  remainingUnits,
+  minAge = 1,
+  maxAge = null,
+}: {
+  remainingUnits: number;
+  minAge?: number;
+  maxAge?: number | null;
+}) {
+  return STAFFING_AGE_GROUPS.filter(
+    (group) =>
+      ageGroupOverlapsSessionRange(group, minAge, maxAge) &&
+      group.unitsPerChild <= remainingUnits,
+  );
+}
+
+export function getStaffingAvailability({
+  children,
+  sessionDate,
+  minAge = 1,
+  maxAge = null,
+  staffCount = STAFF_PER_SESSION,
+}: {
+  children: ChildForStaffing[];
+  sessionDate: Date;
+  minAge?: number;
+  maxAge?: number | null;
+  staffCount?: number;
+}): StaffingAvailability {
+  const capacityUnits = staffCount * STAFFING_UNITS_PER_STAFF;
+  const usedUnits = calculateStaffingUnits({ children, sessionDate });
+  const remainingUnits = Math.max(capacityUnits - usedUnits, 0);
+
+  const bookableAgeGroups = getBookableStaffingAgeGroups({
+    remainingUnits,
+    minAge,
+    maxAge,
+  });
+
+  const lightestBookableChildUnits = Math.min(
+    ...bookableAgeGroups.map((group) => group.unitsPerChild),
+  );
+
+  return {
+    capacityUnits,
+    usedUnits,
+    remainingUnits,
+    isOverCapacity: usedUnits > capacityUnits,
+    bookableAgeGroups,
+    maxAdditionalChildren: Number.isFinite(lightestBookableChildUnits)
+      ? Math.floor(remainingUnits / lightestBookableChildUnits)
+      : 0,
+  };
+}
+
+export function validateStaffingAvailability({
+  existingChildren,
+  requestedChildren,
+  sessionDate,
+  staffCount = STAFF_PER_SESSION,
+}: {
+  existingChildren: ChildForStaffing[];
+  requestedChildren: ChildForStaffing[];
+  sessionDate: Date;
+  staffCount?: number;
+}) {
+  const capacityUnits = staffCount * STAFFING_UNITS_PER_STAFF;
+  const existingUnits = calculateStaffingUnits({
+    children: existingChildren,
+    sessionDate,
+  });
+  const requestedUnits = calculateStaffingUnits({
+    children: requestedChildren,
+    sessionDate,
+  });
+
+  if (existingUnits + requestedUnits > capacityUnits) {
+    return {
+      ok: false as const,
+      reason:
+        "The selected children’s ages exceed the staffing limit for this session.",
+      capacityUnits,
+      existingUnits,
+      requestedUnits,
+    };
+  }
+
+  return {
+    ok: true as const,
+    capacityUnits,
+    existingUnits,
+    requestedUnits,
+  };
 }
 
 function roundToThreeDecimals(value: number) {
@@ -89,32 +283,26 @@ export function calculateStaffingSummary({
   const age2Count = ages.filter((age) => age === 2).length;
   const age3PlusCount = ages.filter((age) => age >= 3).length;
 
-  const groups: StaffingGroup[] = [
-    {
-      key: "UNDER_2",
-      label: "Under 2",
-      childCount: under2Count,
-      ratio: 3,
-      fraction: roundToThreeDecimals(under2Count / 3),
-    },
-    {
-      key: "AGE_2",
-      label: "Age 2",
-      childCount: age2Count,
-      ratio: 5,
-      fraction: roundToThreeDecimals(age2Count / 5),
-    },
-    {
-      key: "AGE_3_PLUS",
-      label: "Age 3+",
-      childCount: age3PlusCount,
-      ratio: 8,
-      fraction: roundToThreeDecimals(age3PlusCount / 8),
-    },
-  ];
+  const groupCounts: Record<StaffingAgeGroupKey, number> = {
+    UNDER_2: under2Count,
+    AGE_2: age2Count,
+    AGE_3_PLUS: age3PlusCount,
+  };
+
+  const groups: StaffingGroup[] = STAFFING_AGE_GROUPS.map((group) => ({
+    key: group.key,
+    label: group.label,
+    childCount: groupCounts[group.key],
+    ratio: group.ratio,
+    fraction: roundToThreeDecimals(
+      (groupCounts[group.key] * group.unitsPerChild) /
+        STAFFING_UNITS_PER_STAFF,
+    ),
+  }));
 
   const staffingFraction = roundToThreeDecimals(
-    groups.reduce((total, group) => total + group.fraction, 0)
+    calculateStaffingUnits({ children, sessionDate }) /
+      STAFFING_UNITS_PER_STAFF,
   );
 
   return {

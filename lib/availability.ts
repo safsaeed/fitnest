@@ -1,10 +1,4 @@
-import {
-  formatSessionCutoff,
-  getSessionCutoffLabel,
-  isPastSessionCutoff,
-} from "@/lib/session-cutoff";
-
-type BookingForAvailability = {
+export type BookingForAvailability = {
   childCount: number;
 };
 
@@ -19,18 +13,17 @@ export function getBookedChildrenCount(bookings: BookingForAvailability[]) {
   return bookings.reduce((total, booking) => total + booking.childCount, 0);
 }
 
-export function getSessionAvailability(session: SessionForAvailability) {
+export function getSessionAvailability(
+  session: SessionForAvailability,
+  now = new Date(),
+) {
   const bookedChildrenCount = getBookedChildrenCount(session.bookings);
   const spacesRemaining = Math.max(session.capacity - bookedChildrenCount, 0);
 
-  const now = new Date();
-
-  const isWithinBookingCutoff = isPastSessionCutoff(session.startsAt, now);
   const isFull = spacesRemaining <= 0;
   const isPast = session.startsAt <= now;
 
-  const canBook =
-    session.isActive && !isPast && !isFull && !isWithinBookingCutoff;
+  const canBook = session.isActive && !isPast && !isFull;
 
   let statusLabel = "Available";
 
@@ -40,8 +33,6 @@ export function getSessionAvailability(session: SessionForAvailability) {
     statusLabel = "Session expired";
   } else if (isFull) {
     statusLabel = "Fully booked";
-  } else if (isWithinBookingCutoff) {
-    statusLabel = "Booking closed";
   }
 
   return {
@@ -49,21 +40,21 @@ export function getSessionAvailability(session: SessionForAvailability) {
     spacesRemaining,
     isFull,
     isPast,
-    isWithinBookingCutoff,
     canBook,
     statusLabel,
-    cutoffAt: formatSessionCutoff(session.startsAt),
   };
 }
 
 export function validateBookingAvailability({
   session,
   requestedChildCount,
+  now = new Date(),
 }: {
   session: SessionForAvailability;
   requestedChildCount: number;
+  now?: Date;
 }) {
-  const availability = getSessionAvailability(session);
+  const availability = getSessionAvailability(session, now);
 
   if (!session.isActive) {
     return {
@@ -77,14 +68,6 @@ export function validateBookingAvailability({
     return {
       ok: false as const,
       reason: "This session has expired.",
-      availability,
-    };
-  }
-
-  if (availability.isWithinBookingCutoff) {
-    return {
-      ok: false as const,
-      reason: getSessionCutoffLabel("booking"),
       availability,
     };
   }
