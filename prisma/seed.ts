@@ -39,7 +39,6 @@ async function main() {
   */
   await prisma.child.deleteMany();
   await prisma.booking.deleteMany();
-  await prisma.membership.deleteMany();
   await prisma.parentChild.deleteMany();
   await prisma.parentUser.deleteMany();
   await prisma.session.deleteMany();
@@ -71,7 +70,7 @@ async function main() {
   });
 
   /*
-    Parent accounts and membership examples.
+    Parent account examples.
   */
 
   const sarahParent = await prisma.parentUser.create({
@@ -82,18 +81,7 @@ async function main() {
       passwordHash: parentPasswordHash,
       defaultEmergencyContactName: "James Thompson",
       defaultEmergencyContactPhone: "07987654321",
-      stripeCustomerId: "cus_test_sarah_active",
       isActive: true,
-      membership: {
-        create: {
-          status: "ACTIVE",
-          stripeSubscriptionId: "sub_test_sarah_active",
-          stripePriceId: "price_test_membership_monthly",
-          currentPeriodStart: daysFromNow(-10),
-          currentPeriodEnd: daysFromNow(20),
-          cancelAtPeriodEnd: false,
-        },
-      },
       children: {
         create: [
           {
@@ -117,7 +105,6 @@ async function main() {
     },
     include: {
       children: true,
-      membership: true,
     },
   });
 
@@ -146,7 +133,6 @@ async function main() {
     },
     include: {
       children: true,
-      membership: true,
     },
   });
 
@@ -158,19 +144,7 @@ async function main() {
       passwordHash: parentPasswordHash,
       defaultEmergencyContactName: "Aman Khan",
       defaultEmergencyContactPhone: "07473111111",
-      stripeCustomerId: "cus_test_aman_cancelling",
       isActive: true,
-      membership: {
-        create: {
-          status: "ACTIVE",
-          stripeSubscriptionId: "sub_test_aman_cancelling",
-          stripePriceId: "price_test_membership_monthly",
-          currentPeriodStart: daysFromNow(-20),
-          currentPeriodEnd: daysFromNow(10),
-          cancelAtPeriodEnd: true,
-          cancelledAt: new Date(),
-        },
-      },
       children: {
         create: [
           {
@@ -210,7 +184,6 @@ async function main() {
     },
     include: {
       children: true,
-      membership: true,
     },
   });
 
@@ -222,18 +195,7 @@ async function main() {
       passwordHash: parentPasswordHash,
       defaultEmergencyContactName: "Tom Adams",
       defaultEmergencyContactPhone: "07333987654",
-      stripeCustomerId: "cus_test_rachel_past_due",
       isActive: true,
-      membership: {
-        create: {
-          status: "PAST_DUE",
-          stripeSubscriptionId: "sub_test_rachel_past_due",
-          stripePriceId: "price_test_membership_monthly",
-          currentPeriodStart: daysFromNow(-31),
-          currentPeriodEnd: daysFromNow(-1),
-          cancelAtPeriodEnd: false,
-        },
-      },
       children: {
         create: [
           {
@@ -249,11 +211,10 @@ async function main() {
     },
     include: {
       children: true,
-      membership: true,
     },
   });
 
-  const cancelledMembershipParent = await prisma.parentUser.create({
+  const oliviaParent = await prisma.parentUser.create({
     data: {
       name: "Olivia Carter",
       email: "olivia@example.com",
@@ -261,19 +222,7 @@ async function main() {
       passwordHash: parentPasswordHash,
       defaultEmergencyContactName: "Sam Carter",
       defaultEmergencyContactPhone: "07000999222",
-      stripeCustomerId: "cus_test_olivia_cancelled",
       isActive: true,
-      membership: {
-        create: {
-          status: "CANCELLED",
-          stripeSubscriptionId: "sub_test_olivia_cancelled",
-          stripePriceId: "price_test_membership_monthly",
-          currentPeriodStart: daysFromNow(-35),
-          currentPeriodEnd: daysFromNow(-5),
-          cancelAtPeriodEnd: false,
-          cancelledAt: daysFromNow(-20),
-        },
-      },
       children: {
         create: [
           {
@@ -289,7 +238,6 @@ async function main() {
     },
     include: {
       children: true,
-      membership: true,
     },
   });
 
@@ -380,8 +328,7 @@ async function main() {
   /*
     Venues and sessions.
 
-    pricePence = standard customer price
-    memberPricePence = active membership price, when available
+    pricePence = customer price per child
   */
   const doncasterVenue = await prisma.venue.create({
     data: {
@@ -402,7 +349,6 @@ async function main() {
             endsAt: addHours(daysFromNow(3, 10, 0), 1),
             capacity: 12,
             pricePence: 1000,
-            memberPricePence: 700,
             minAge: 4,
             maxAge: 12,
             isActive: true,
@@ -414,7 +360,6 @@ async function main() {
             endsAt: addHours(daysFromNow(5, 16, 0), 1),
             capacity: 10,
             pricePence: 1200,
-            memberPricePence: 900,
             minAge: 5,
             maxAge: 13,
             isActive: true,
@@ -427,7 +372,6 @@ async function main() {
             endsAt: addHours(daysFromNow(8, 9, 30), 1),
             capacity: 8,
             pricePence: 900,
-            memberPricePence: 700,
             minAge: 1,
             maxAge: 4,
             isActive: true,
@@ -459,7 +403,6 @@ async function main() {
             endsAt: addHours(daysFromNow(7, 11, 30), 1),
             capacity: 10,
             pricePence: 1000,
-            memberPricePence: 700,
             minAge: 4,
             maxAge: 12,
             isActive: true,
@@ -471,7 +414,6 @@ async function main() {
             endsAt: addHours(daysFromNow(2, 13, 0), 3),
             capacity: 10,
             pricePence: 1000,
-            memberPricePence: 700,
             minAge: 1,
             maxAge: 8,
             isActive: true,
@@ -483,7 +425,6 @@ async function main() {
             endsAt: addHours(daysFromNow(4, 13, 0), 3),
             capacity: 10,
             pricePence: 1000,
-            memberPricePence: 700,
             minAge: 1,
             maxAge: 8,
             isActive: true,
@@ -495,7 +436,6 @@ async function main() {
             endsAt: addHours(daysFromNow(6, 13, 0), 3),
             capacity: 10,
             pricePence: 1000,
-            memberPricePence: 700,
             minAge: 1,
             maxAge: 8,
             isActive: true,
@@ -528,7 +468,6 @@ async function main() {
             endsAt: addHours(daysFromNow(10, 10, 0), 3),
             capacity: 16,
             pricePence: 1800,
-            memberPricePence: 1400,
             minAge: 6,
             maxAge: 14,
             isActive: true,
@@ -540,7 +479,6 @@ async function main() {
             endsAt: addHours(daysFromNow(12, 9, 0), 1),
             capacity: 12,
             pricePence: 1100,
-            memberPricePence: 800,
             minAge: 5,
             maxAge: 11,
             isActive: true,
@@ -571,7 +509,6 @@ async function main() {
             endsAt: addHours(daysFromNow(14, 12, 0), 1),
             capacity: 10,
             pricePence: 1000,
-            memberPricePence: null,
             minAge: 4,
             maxAge: 10,
             isActive: false,
@@ -595,8 +532,7 @@ async function main() {
 
   /*
     Booking 1:
-    Active member account booking.
-    Sarah receives member pricing: 2 children x £7 = £14.
+    Confirmed account booking for 2 children x £10 = £20.
   */
   bookings.push(
     await prisma.booking.create({
@@ -613,12 +549,12 @@ async function main() {
         status: "CONFIRMED",
         paymentStatus: "PAID",
         refundStatus: "NONE",
-        pricingType: "MEMBER",
-        unitPricePence: 700,
-        totalAmountPence: 1400,
+        pricingType: "STANDARD",
+        unitPricePence: 1000,
+        totalAmountPence: 2000,
         childCount: 2,
-        stripeCheckoutSessionId: "cs_test_member_confirmed_001",
-        stripePaymentIntentId: "pi_test_member_confirmed_001",
+        stripeCheckoutSessionId: "cs_test_confirmed_001",
+        stripePaymentIntentId: "pi_test_confirmed_001",
         consentAccepted: true,
         consentAcceptedAt: new Date(),
         consentTextVersion: "v1",
@@ -649,8 +585,7 @@ async function main() {
 
   /*
     Booking 2:
-    Logged-in parent without a membership.
-    Michael pays standard pricing: 1 child x £12 = £12.
+    Pending account booking for 1 child x £12 = £12.
   */
   bookings.push(
     await prisma.booking.create({
@@ -719,7 +654,7 @@ async function main() {
         stripeRefundId: "re_test_refunded_003",
         cancelledAt: new Date(),
         cancellationReason:
-          "Bookings and cancellations close at 6pm the day before the session.",
+          "Cancelled at least 24 hours before the session; full refund issued.",
         refundedAt: new Date(),
         consentAccepted: true,
         consentAcceptedAt: new Date(),
@@ -742,8 +677,7 @@ async function main() {
 
   /*
     Booking 4:
-    Member who has scheduled cancellation but remains active until period end.
-    Aman still receives member pricing: 4 children x £7 = £28.
+    Confirmed account booking for 4 children x £10 = £40.
   */
   bookings.push(
     await prisma.booking.create({
@@ -760,12 +694,12 @@ async function main() {
         status: "CONFIRMED",
         paymentStatus: "PAID",
         refundStatus: "NONE",
-        pricingType: "MEMBER",
-        unitPricePence: 700,
-        totalAmountPence: 2800,
+        pricingType: "STANDARD",
+        unitPricePence: 1000,
+        totalAmountPence: 4000,
         childCount: 4,
-        stripeCheckoutSessionId: "cs_test_member_confirmed_004",
-        stripePaymentIntentId: "pi_test_member_confirmed_004",
+        stripeCheckoutSessionId: "cs_test_confirmed_004",
+        stripePaymentIntentId: "pi_test_confirmed_004",
         consentAccepted: true,
         consentAcceptedAt: new Date(),
         consentTextVersion: "v1",
@@ -919,8 +853,7 @@ async function main() {
 
   /*
     Booking 7:
-    Parent has a PAST_DUE membership.
-    Member pricing is unavailable, so standard pricing is used.
+    Account booking with a failed payment.
   */
   bookings.push(
     await prisma.booking.create({
@@ -1066,33 +999,27 @@ async function main() {
       {
         email: sarahParent.email,
         password: parentPassword,
-        membership: sarahParent.membership?.status,
-        example: "Active member with member-priced booking",
+        example: "Account customer with a confirmed booking",
       },
       {
         email: michaelParent.email,
         password: parentPassword,
-        membership: "NO MEMBERSHIP",
-        example: "Account customer paying standard pricing",
+        example: "Account customer with a pending booking",
       },
       {
         email: amanParent.email,
         password: parentPassword,
-        membership: amanParent.membership?.status,
-        cancelAtPeriodEnd: amanParent.membership?.cancelAtPeriodEnd,
-        example: "Member cancelled renewal but still receives benefits",
+        example: "Account customer with multiple saved children",
       },
       {
         email: rachelParent.email,
         password: parentPassword,
-        membership: rachelParent.membership?.status,
-        example: "Past-due member who no longer receives discount",
+        example: "Account customer with a failed payment",
       },
       {
-        email: cancelledMembershipParent.email,
+        email: oliviaParent.email,
         password: parentPassword,
-        membership: cancelledMembershipParent.membership?.status,
-        example: "Cancelled membership account",
+        example: "Account customer with a saved child",
       },
     ],
     venueInterests: venueInterests.count,
@@ -1105,8 +1032,7 @@ async function main() {
     sessions: allSessions.map((session) => ({
       title: session.title,
       startsAt: session.startsAt,
-      standardPricePence: session.pricePence,
-      memberPricePence: session.memberPricePence,
+      pricePence: session.pricePence,
       active: session.isActive,
     })),
     bookings: bookings.map((booking) => ({
