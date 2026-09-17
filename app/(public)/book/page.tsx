@@ -154,7 +154,7 @@ export default async function BookPage({ searchParams }: BookPageProps) {
                       }`}
                     >
                       <CalendarDays className="h-3.5 w-3.5" />
-                      Session
+                      {!venue.sessions.length ? "No session" : "Session"}
                       {venue.sessions.length !== 1 ? "s" : ""} available
                     </span>
 
