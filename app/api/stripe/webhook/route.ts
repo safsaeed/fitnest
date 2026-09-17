@@ -2,19 +2,8 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
-import { validateBookingAvailability } from "@/lib/availability";
+import { validateBookingCapacity } from "@/lib/booking-capacity";
 import { sendBookingConfirmationEmail } from "@/lib/booking-emails";
-import {
-  sendMembershipActiveEmail,
-  sendMembershipCancelledEmail,
-  sendMembershipPaymentFailedEmail,
-} from "@/lib/membership-emails";
-import type { MembershipStatus } from "@prisma/client";
-
-type StripeSubscriptionWithPeriods = Stripe.Subscription & {
-  current_period_start?: number | null;
-  current_period_end?: number | null;
-};
 
 export async function POST(request: Request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -56,9 +45,7 @@ export async function POST(request: Request) {
       case "checkout.session.completed": {
         const checkoutSession = event.data.object as Stripe.Checkout.Session;
 
-        if (checkoutSession.mode === "subscription") {
-          await handleMembershipCheckoutSessionCompleted(checkoutSession);
-        } else {
+        if (checkoutSession.mode === "payment") {
           await handleBookingCheckoutSessionCompleted(checkoutSession);
         }
 
@@ -68,44 +55,9 @@ export async function POST(request: Request) {
       case "checkout.session.expired": {
         const checkoutSession = event.data.object as Stripe.Checkout.Session;
 
-        if (checkoutSession.mode === "subscription") {
-          await handleMembershipCheckoutSessionExpired(checkoutSession);
-        } else {
+        if (checkoutSession.mode === "payment") {
           await handleCheckoutSessionExpired(checkoutSession);
         }
-
-        break;
-      }
-
-      case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-
-        await handleCustomerSubscriptionUpdated(subscription);
-
-        break;
-      }
-
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-
-        await handleCustomerSubscriptionDeleted(subscription);
-
-        break;
-      }
-
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-
-        await handleInvoicePaymentFailed(invoice);
-
-        break;
-      }
-
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice;
-
-        await handleInvoicePaymentSucceeded(invoice);
 
         break;
       }
@@ -126,419 +78,6 @@ export async function POST(request: Request) {
   }
 }
 
-function mapStripeSubscriptionStatus(status: Stripe.Subscription.Status) {
-  if (status === "active" || status === "trialing") {
-    return "ACTIVE" satisfies MembershipStatus;
-  }
-
-  if (status === "past_due") {
-    return "PAST_DUE" satisfies MembershipStatus;
-  }
-
-  if (status === "unpaid") {
-    return "UNPAID" satisfies MembershipStatus;
-  }
-
-  if (status === "canceled") {
-    return "CANCELLED" satisfies MembershipStatus;
-  }
-
-  return "INCOMPLETE" satisfies MembershipStatus;
-}
-
-function getStripeTimestampDate(timestamp?: number | null) {
-  if (!timestamp) {
-    return null;
-  }
-
-  return new Date(timestamp * 1000);
-}
-
-function getSubscriptionPriceId(subscription: Stripe.Subscription) {
-  return subscription.items.data[0]?.price.id ?? null;
-}
-
-function getSubscriptionParentUserId(subscription: Stripe.Subscription) {
-  const metadataParentUserId = subscription.metadata?.parentUserId;
-
-  if (metadataParentUserId) {
-    return metadataParentUserId;
-  }
-
-  return null;
-}
-
-function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice) {
-  const invoiceWithSubscription = invoice as Stripe.Invoice & {
-    subscription?: string | Stripe.Subscription | null;
-  };
-
-  const subscription = invoiceWithSubscription.subscription;
-
-  if (typeof subscription === "string") {
-    return subscription;
-  }
-
-  return subscription?.id ?? null;
-}
-
-async function syncMembershipFromSubscription(
-  subscription: Stripe.Subscription,
-) {
-  const subscriptionWithPeriods = subscription as StripeSubscriptionWithPeriods;
-
-  const stripeSubscriptionId = subscription.id;
-  const stripeCustomerId =
-    typeof subscription.customer === "string"
-      ? subscription.customer
-      : subscription.customer.id;
-
-  const parentUserId = getSubscriptionParentUserId(subscription);
-  const status = mapStripeSubscriptionStatus(subscription.status);
-  const stripePriceId = getSubscriptionPriceId(subscription);
-
-  const currentPeriodStart = getStripeTimestampDate(
-    subscriptionWithPeriods.current_period_start,
-  );
-
-  const currentPeriodEnd = getStripeTimestampDate(
-    subscriptionWithPeriods.current_period_end,
-  );
-
-  const cancelledAt = getStripeTimestampDate(subscription.canceled_at);
-
-  const parentUser = parentUserId
-    ? await prisma.parentUser.findUnique({
-        where: {
-          id: parentUserId,
-        },
-        select: {
-          id: true,
-          stripeCustomerId: true,
-        },
-      })
-    : await prisma.parentUser.findFirst({
-        where: {
-          stripeCustomerId,
-        },
-        select: {
-          id: true,
-          stripeCustomerId: true,
-        },
-      });
-
-  if (!parentUser) {
-    console.error(
-      `Could not find parent user for subscription ${stripeSubscriptionId}`,
-    );
-    return;
-  }
-
-  if (!parentUser.stripeCustomerId) {
-    await prisma.parentUser.update({
-      where: {
-        id: parentUser.id,
-      },
-      data: {
-        stripeCustomerId,
-      },
-    });
-  }
-
-  const existingMembership = await prisma.membership.findUnique({
-    where: {
-      parentUserId: parentUser.id,
-    },
-    select: {
-      status: true,
-    },
-  });
-
-  await prisma.membership.upsert({
-    where: {
-      parentUserId: parentUser.id,
-    },
-    create: {
-      parentUserId: parentUser.id,
-      status,
-      stripeSubscriptionId,
-      stripePriceId,
-      currentPeriodStart,
-      currentPeriodEnd,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      cancelledAt,
-    },
-    update: {
-      status,
-      stripeSubscriptionId,
-      stripePriceId,
-      currentPeriodStart,
-      currentPeriodEnd,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      cancelledAt,
-    },
-  });
-
-  const appUrl = process.env.APP_URL;
-  const membershipUrl = appUrl ? `${appUrl}/account/membership` : null;
-
-  if (membershipUrl) {
-    const parentForEmail = await prisma.parentUser.findUnique({
-      where: {
-        id: parentUser.id,
-      },
-      select: {
-        name: true,
-        email: true,
-      },
-    });
-
-    if (parentForEmail) {
-      try {
-        if (existingMembership?.status !== "ACTIVE" && status === "ACTIVE") {
-          await sendMembershipActiveEmail({
-            to: parentForEmail.email,
-            parentName: parentForEmail.name,
-            membershipUrl,
-            currentPeriodEnd,
-          });
-        }
-
-        if (
-          existingMembership?.status !== "PAST_DUE" &&
-          status === "PAST_DUE"
-        ) {
-          await sendMembershipPaymentFailedEmail({
-            to: parentForEmail.email,
-            parentName: parentForEmail.name,
-            membershipUrl,
-          });
-        }
-
-        if (
-          existingMembership?.status !== "CANCELLED" &&
-          status === "CANCELLED"
-        ) {
-          await sendMembershipCancelledEmail({
-            to: parentForEmail.email,
-            parentName: parentForEmail.name,
-            membershipUrl,
-            currentPeriodEnd,
-          });
-        }
-      } catch (error) {
-        console.error(
-          `Membership synced but email failed for parent ${parentUser.id}`,
-          error,
-        );
-      }
-    }
-  }
-
-  console.log(
-    `Membership synced for parent ${parentUser.id}: ${status} (${stripeSubscriptionId})`,
-  );
-}
-
-async function handleMembershipCheckoutSessionCompleted(
-  checkoutSession: Stripe.Checkout.Session,
-) {
-  const parentUserId = checkoutSession.metadata?.parentUserId;
-
-  if (!parentUserId) {
-    throw new Error("Missing parentUserId in membership Checkout metadata");
-  }
-
-  const subscriptionId =
-    typeof checkoutSession.subscription === "string"
-      ? checkoutSession.subscription
-      : checkoutSession.subscription?.id;
-
-  const stripeCustomerId =
-    typeof checkoutSession.customer === "string"
-      ? checkoutSession.customer
-      : checkoutSession.customer?.id;
-
-  if (stripeCustomerId) {
-    await prisma.parentUser.update({
-      where: {
-        id: parentUserId,
-      },
-      data: {
-        stripeCustomerId,
-      },
-    });
-  }
-
-  if (!subscriptionId) {
-    await prisma.membership.upsert({
-      where: {
-        parentUserId,
-      },
-      create: {
-        parentUserId,
-        status: "INCOMPLETE",
-      },
-      update: {
-        status: "INCOMPLETE",
-      },
-    });
-
-    return;
-  }
-
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-
-  await syncMembershipFromSubscription(subscription);
-}
-
-async function handleMembershipCheckoutSessionExpired(
-  checkoutSession: Stripe.Checkout.Session,
-) {
-  const parentUserId = checkoutSession.metadata?.parentUserId;
-
-  if (!parentUserId) {
-    return;
-  }
-
-  const existingMembership = await prisma.membership.findUnique({
-    where: {
-      parentUserId,
-    },
-  });
-
-  if (!existingMembership || existingMembership.status !== "INCOMPLETE") {
-    return;
-  }
-
-  await prisma.membership.update({
-    where: {
-      parentUserId,
-    },
-    data: {
-      status: "INCOMPLETE",
-    },
-  });
-
-  console.log(`Membership checkout expired for parent: ${parentUserId}`);
-}
-
-async function handleCustomerSubscriptionUpdated(
-  subscription: Stripe.Subscription,
-) {
-  await syncMembershipFromSubscription(subscription);
-}
-
-async function handleCustomerSubscriptionDeleted(
-  subscription: Stripe.Subscription,
-) {
-  const subscriptionWithPeriods = subscription as StripeSubscriptionWithPeriods;
-
-  const stripeSubscriptionId = subscription.id;
-
-  const existingMembership = await prisma.membership.findFirst({
-    where: {
-      stripeSubscriptionId,
-    },
-  });
-
-  if (!existingMembership) {
-    await syncMembershipFromSubscription(subscription);
-    return;
-  }
-
-  await prisma.membership.update({
-    where: {
-      id: existingMembership.id,
-    },
-    data: {
-      status: "CANCELLED",
-      currentPeriodStart: getStripeTimestampDate(
-        subscriptionWithPeriods.current_period_start,
-      ),
-      currentPeriodEnd: getStripeTimestampDate(
-        subscriptionWithPeriods.current_period_end,
-      ),
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      cancelledAt:
-        getStripeTimestampDate(subscription.canceled_at) ?? new Date(),
-    },
-  });
-
-  console.log(`Membership cancelled: ${stripeSubscriptionId}`);
-}
-
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  const subscriptionId = getSubscriptionIdFromInvoice(invoice);
-
-  if (!subscriptionId) {
-    return;
-  }
-
-  const membership = await prisma.membership.findFirst({
-    where: {
-      stripeSubscriptionId: subscriptionId,
-    },
-  });
-
-  if (!membership) {
-    return;
-  }
-
-  await prisma.membership.update({
-    where: {
-      id: membership.id,
-    },
-    data: {
-      status: "PAST_DUE",
-    },
-  });
-
-  const appUrl = process.env.APP_URL;
-  const membershipUrl = appUrl ? `${appUrl}/account/membership` : null;
-
-  if (membershipUrl && membership.status !== "PAST_DUE") {
-    const parentUser = await prisma.parentUser.findUnique({
-      where: {
-        id: membership.parentUserId,
-      },
-      select: {
-        name: true,
-        email: true,
-      },
-    });
-
-    if (parentUser) {
-      try {
-        await sendMembershipPaymentFailedEmail({
-          to: parentUser.email,
-          parentName: parentUser.name,
-          membershipUrl,
-        });
-      } catch (error) {
-        console.error(
-          `Membership payment failed but email failed: ${membership.id}`,
-          error,
-        );
-      }
-    }
-  }
-
-  console.log(`Membership payment failed: ${subscriptionId}`);
-}
-
-async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
-  const subscriptionId = getSubscriptionIdFromInvoice(invoice);
-
-  if (!subscriptionId) {
-    return;
-  }
-
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-
-  await syncMembershipFromSubscription(subscription);
-}
-
 async function handleBookingCheckoutSessionCompleted(
   checkoutSession: Stripe.Checkout.Session,
 ) {
@@ -548,59 +87,95 @@ async function handleBookingCheckoutSessionCompleted(
     throw new Error("Missing bookingId in Checkout Session metadata");
   }
 
-  const booking = await prisma.booking.findUnique({
+  const bookingSession = await prisma.booking.findUnique({
     where: {
       id: bookingId,
     },
-    include: {
-      children: true,
-      session: {
-        include: {
-          venue: true,
-          bookings: {
-            where: {
-              status: "CONFIRMED",
-            },
-            select: {
-              childCount: true,
+    select: {
+      sessionId: true,
+    },
+  });
+
+  if (!bookingSession) {
+    throw new Error(`Booking not found: ${bookingId}`);
+  }
+
+  const confirmation = await prisma.$transaction(async (transaction) => {
+    await transaction.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${bookingSession.sessionId}))
+    `;
+
+    const booking = await transaction.booking.findUnique({
+      where: {
+        id: bookingId,
+      },
+      include: {
+        children: true,
+        session: {
+          include: {
+            venue: true,
+            bookings: {
+              where: {
+                status: "CONFIRMED",
+              },
+              select: {
+                childCount: true,
+                children: {
+                  select: {
+                    dateOfBirth: true,
+                  },
+                },
+              },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  if (!booking) {
-    throw new Error(`Booking not found: ${bookingId}`);
-  }
+    if (!booking) {
+      throw new Error(`Booking not found: ${bookingId}`);
+    }
 
-  if (booking.status === "CONFIRMED" && booking.paymentStatus === "PAID") {
-    console.log(`Booking already confirmed: ${booking.bookingReference}`);
-    return;
-  }
+    if (booking.status === "CONFIRMED" && booking.paymentStatus === "PAID") {
+      return { status: "already-confirmed" as const, booking };
+    }
 
-  if (booking.status !== "PENDING") {
-    console.log(
-      `Booking ${booking.bookingReference} is not pending. Current status: ${booking.status}`,
-    );
-    return;
-  }
+    if (booking.status !== "PENDING") {
+      return { status: "not-pending" as const, booking };
+    }
 
-  const availabilityCheck = validateBookingAvailability({
-    session: booking.session,
-    requestedChildCount: booking.childCount,
-  });
+    const capacityCheck = validateBookingCapacity({
+      session: booking.session,
+      requestedChildren: booking.children,
+    });
 
-  if (!availabilityCheck.ok) {
-    console.error(
-      `Cannot confirm booking ${booking.bookingReference}: ${availabilityCheck.reason}`,
-    );
+    if (!capacityCheck.ok) {
+      await transaction.booking.update({
+        where: {
+          id: booking.id,
+        },
+        data: {
+          paymentStatus: "PAID",
+          stripePaymentIntentId:
+            typeof checkoutSession.payment_intent === "string"
+              ? checkoutSession.payment_intent
+              : (checkoutSession.payment_intent?.id ?? null),
+        },
+      });
 
-    await prisma.booking.update({
+      return {
+        status: "unavailable" as const,
+        booking,
+        reason: capacityCheck.reason,
+      };
+    }
+
+    await transaction.booking.update({
       where: {
         id: booking.id,
       },
       data: {
+        status: "CONFIRMED",
         paymentStatus: "PAID",
         stripePaymentIntentId:
           typeof checkoutSession.payment_intent === "string"
@@ -609,22 +184,29 @@ async function handleBookingCheckoutSessionCompleted(
       },
     });
 
+    return { status: "confirmed" as const, booking };
+  });
+
+  const booking = confirmation.booking;
+
+  if (confirmation.status === "already-confirmed") {
+    console.log(`Booking already confirmed: ${booking.bookingReference}`);
     return;
   }
 
-  await prisma.booking.update({
-    where: {
-      id: booking.id,
-    },
-    data: {
-      status: "CONFIRMED",
-      paymentStatus: "PAID",
-      stripePaymentIntentId:
-        typeof checkoutSession.payment_intent === "string"
-          ? checkoutSession.payment_intent
-          : (checkoutSession.payment_intent?.id ?? null),
-    },
-  });
+  if (confirmation.status === "not-pending") {
+    console.log(
+      `Booking ${booking.bookingReference} is not pending. Current status: ${booking.status}`,
+    );
+    return;
+  }
+
+  if (confirmation.status === "unavailable") {
+    console.error(
+      `Cannot confirm booking ${booking.bookingReference}: ${confirmation.reason}`,
+    );
+    return;
+  }
 
   const venueAddress = [
     booking.session.venue.addressLine1,
@@ -658,9 +240,10 @@ async function handleBookingCheckoutSessionCompleted(
       startsAt: booking.session.startsAt,
       endsAt: booking.session.endsAt,
       children: booking.children,
+      emergencyContactName: booking.emergencyContactName,
+      emergencyContactPhone: booking.emergencyContactPhone,
       totalAmountPence: booking.totalAmountPence,
       unitPricePence: booking.unitPricePence,
-      pricingType: booking.pricingType,
       bookingUrl: publicBookingUrl,
       accountBookingUrl,
     });

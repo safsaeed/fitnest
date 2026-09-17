@@ -70,7 +70,6 @@ function validateCommonSessionFields({
   description,
   capacity,
   pricePounds,
-  memberPricePounds,
   minAge,
   maxAge,
 }: {
@@ -79,7 +78,6 @@ function validateCommonSessionFields({
   description: string;
   capacity: number;
   pricePounds: number;
-  memberPricePounds: number | null;
   minAge: number | null;
   maxAge: number | null;
 }) {
@@ -102,14 +100,6 @@ function validateCommonSessionFields({
     return "invalid-price";
   }
 
-  if (memberPricePounds !== null && !isValidPrice(memberPricePounds)) {
-    return "invalid-member-price";
-  }
-
-  if (memberPricePounds !== null && memberPricePounds > pricePounds) {
-    return "member-price-too-high";
-  }
-
   if (!isValidAge(minAge) || !isValidAge(maxAge)) {
     return "invalid-age";
   }
@@ -129,7 +119,6 @@ function validateSessionInput({
   endsAt,
   capacity,
   pricePounds,
-  memberPricePounds,
   minAge,
   maxAge,
   mode,
@@ -141,7 +130,6 @@ function validateSessionInput({
   endsAt: Date | null;
   capacity: number;
   pricePounds: number;
-  memberPricePounds: number | null;
   minAge: number | null;
   maxAge: number | null;
   mode: "create" | "edit";
@@ -152,7 +140,6 @@ function validateSessionInput({
     description,
     capacity,
     pricePounds,
-    memberPricePounds,
     minAge,
     maxAge,
   });
@@ -197,7 +184,6 @@ function getSessionInput(formData: FormData) {
 
   const capacity = getFormNumber(formData, "capacity") ?? 10;
   const pricePounds = getFormNumber(formData, "pricePounds") ?? 10;
-  const memberPricePounds = getFormNumber(formData, "memberPricePounds");
   const minAge = getFormNumber(formData, "minAge");
   const maxAge = getFormNumber(formData, "maxAge");
 
@@ -209,7 +195,6 @@ function getSessionInput(formData: FormData) {
     endsAt,
     capacity,
     pricePounds,
-    memberPricePounds,
     minAge,
     maxAge,
     isActive: getFormBoolean(formData, "isActive"),
@@ -234,7 +219,6 @@ function getRepeatingSessionInput(formData: FormData) {
 
   const capacity = getFormNumber(formData, "capacity") ?? 10;
   const pricePounds = getFormNumber(formData, "pricePounds") ?? 10;
-  const memberPricePounds = getFormNumber(formData, "memberPricePounds");
   const minAge = getFormNumber(formData, "minAge");
   const maxAge = getFormNumber(formData, "maxAge");
 
@@ -249,7 +233,6 @@ function getRepeatingSessionInput(formData: FormData) {
     weekdays,
     capacity,
     pricePounds,
-    memberPricePounds,
     minAge,
     maxAge,
   };
@@ -264,7 +247,6 @@ function getSeriesEditInput(formData: FormData) {
     endTime: getFormString(formData, "endTime"),
     capacity: getFormNumber(formData, "capacity") ?? 10,
     pricePounds: getFormNumber(formData, "pricePounds") ?? 10,
-    memberPricePounds: getFormNumber(formData, "memberPricePounds"),
     minAge: getFormNumber(formData, "minAge"),
     maxAge: getFormNumber(formData, "maxAge"),
     isActive: getFormBoolean(formData, "isActive"),
@@ -275,10 +257,6 @@ function getSeriesEditInput(formData: FormData) {
 
 function pricePoundsToPence(pricePounds: number) {
   return Math.round(pricePounds * 100);
-}
-
-function optionalPricePoundsToPence(pricePounds: number | null) {
-  return pricePounds === null ? null : pricePoundsToPence(pricePounds);
 }
 
 async function createSingleSessionFromForm(formData: FormData): Promise<void> {
@@ -302,7 +280,6 @@ async function createSingleSessionFromForm(formData: FormData): Promise<void> {
       endsAt: input.endsAt!,
       capacity: input.capacity,
       pricePence: pricePoundsToPence(input.pricePounds),
-      memberPricePence: optionalPricePoundsToPence(input.memberPricePounds),
       minAge: input.minAge,
       maxAge: input.maxAge,
       isActive: true,
@@ -324,7 +301,6 @@ async function createRepeatingSessionsFromForm(
     description: input.description,
     capacity: input.capacity,
     pricePounds: input.pricePounds,
-    memberPricePounds: input.memberPricePounds,
     minAge: input.minAge,
     maxAge: input.maxAge,
   });
@@ -383,7 +359,6 @@ async function createRepeatingSessionsFromForm(
   }
 
   const standardPricePence = pricePoundsToPence(input.pricePounds);
-  const memberPricePence = optionalPricePoundsToPence(input.memberPricePounds);
 
   const sessionsToCreate = sessionDates.map((date) => {
     const startsAt = combineDateAndTime(date, input.startTime);
@@ -401,7 +376,6 @@ async function createRepeatingSessionsFromForm(
       endsAt,
       capacity: input.capacity,
       pricePence: standardPricePence,
-      memberPricePence,
       minAge: input.minAge,
       maxAge: input.maxAge,
       isActive: true,
@@ -479,7 +453,6 @@ export async function updateSession(
       endsAt: input.endsAt!,
       capacity: input.capacity,
       pricePence: pricePoundsToPence(input.pricePounds),
-      memberPricePence: optionalPricePoundsToPence(input.memberPricePounds),
       minAge: input.minAge,
       maxAge: input.maxAge,
       isActive: input.isActive,
@@ -570,7 +543,6 @@ export async function updateSessionSeries(
   }
 
   const standardPricePence = pricePoundsToPence(input.pricePounds);
-  const memberPricePence = optionalPricePoundsToPence(input.memberPricePounds);
 
   try {
     await prisma.$transaction([
@@ -595,7 +567,6 @@ export async function updateSessionSeries(
             endsAt: session.endsAt!,
             capacity: input.capacity,
             pricePence: standardPricePence,
-            memberPricePence,
             minAge: input.minAge,
             maxAge: input.maxAge,
             isActive: input.isActive,

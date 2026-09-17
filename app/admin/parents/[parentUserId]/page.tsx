@@ -12,30 +12,6 @@ type AdminParentDetailPageProps = {
   }>;
 };
 
-function formatNullableDate(date?: Date | null) {
-  if (!date) {
-    return "—";
-  }
-
-  return formatDate(date);
-}
-
-function getMembershipBadgeClass(status?: string | null) {
-  if (status === "ACTIVE") {
-    return "border-(--color-success-hover) bg-(--color-success-soft) text-(--color-success)";
-  }
-
-  if (status === "PAST_DUE" || status === "UNPAID") {
-    return "border-(--color-danger-hover) bg-(--color-danger-soft) text-(--color-danger)";
-  }
-
-  if (status === "CANCELLED") {
-    return "border-(--color-brand-border) bg-(--color-brand-soft) text-(--color-text-secondary)";
-  }
-
-  return "border-(--color-warning-hover) bg-(--color-warning-soft) text-(--color-warning)";
-}
-
 function getBookingBadgeClass(status: string) {
   if (status === "CONFIRMED") {
     return "border-(--color-success-hover) bg-(--color-success-soft) text-(--color-success)";
@@ -46,38 +22,6 @@ function getBookingBadgeClass(status: string) {
   }
 
   return "border-(--color-danger-hover) bg-(--color-danger-soft) text-(--color-danger)";
-}
-
-function getMembershipLabel(status?: string | null) {
-  if (!status) {
-    return "No membership";
-  }
-
-  if (status === "ACTIVE") {
-    return "Active";
-  }
-
-  if (status === "INCOMPLETE") {
-    return "Incomplete";
-  }
-
-  if (status === "PAST_DUE") {
-    return "Past due";
-  }
-
-  if (status === "UNPAID") {
-    return "Unpaid";
-  }
-
-  if (status === "CANCELLED") {
-    return "Cancelled";
-  }
-
-  return status;
-}
-
-function getPricingLabel(pricingType: string) {
-  return pricingType === "MEMBER" ? "Member price" : "Standard price";
 }
 
 function DetailRow({
@@ -107,7 +51,6 @@ export default async function AdminParentDetailPage({
       id: parentUserId,
     },
     include: {
-      membership: true,
       children: {
         orderBy: {
           createdAt: "asc",
@@ -151,8 +94,7 @@ export default async function AdminParentDetailPage({
           <h1 className="mt-3 text-3xl font-semibold">{parent.name}</h1>
 
           <p className="mt-2 text-sm text-(--color-text-secondary)">
-            Parent account, membership, saved children and account-linked
-            bookings.
+            Parent account, saved children and account-linked bookings.
           </p>
 
           <ButtonLink
@@ -168,7 +110,7 @@ export default async function AdminParentDetailPage({
           </ButtonLink>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6">
           <Card>
             <h2 className="text-lg font-semibold">Parent details</h2>
 
@@ -191,57 +133,6 @@ export default async function AdminParentDetailPage({
               <DetailRow
                 label="Created"
                 value={formatDateTime(parent.createdAt)}
-              />
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <h2 className="text-lg font-semibold">Membership</h2>
-
-              <span
-                className={`rounded-lg border px-2 py-1 text-xs font-medium ${getMembershipBadgeClass(
-                  parent.membership?.status,
-                )}`}
-              >
-                {getMembershipLabel(parent.membership?.status)}
-              </span>
-            </div>
-
-            <div className="mt-4">
-              <DetailRow
-                label="Status"
-                value={getMembershipLabel(parent.membership?.status)}
-              />
-              <DetailRow
-                label="Stripe customer ID"
-                value={parent.stripeCustomerId || "—"}
-              />
-              <DetailRow
-                label="Stripe subscription ID"
-                value={parent.membership?.stripeSubscriptionId || "—"}
-              />
-              <DetailRow
-                label="Stripe price ID"
-                value={parent.membership?.stripePriceId || "—"}
-              />
-              <DetailRow
-                label="Current period start"
-                value={formatNullableDate(
-                  parent.membership?.currentPeriodStart,
-                )}
-              />
-              <DetailRow
-                label="Current period end"
-                value={formatNullableDate(parent.membership?.currentPeriodEnd)}
-              />
-              <DetailRow
-                label="Cancel at period end"
-                value={parent.membership?.cancelAtPeriodEnd ? "Yes" : "No"}
-              />
-              <DetailRow
-                label="Cancelled at"
-                value={formatNullableDate(parent.membership?.cancelledAt)}
               />
             </div>
           </Card>
@@ -336,11 +227,6 @@ export default async function AdminParentDetailPage({
                     </div>
 
                     <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                      <p>
-                        <span className="text-(--color-text-muted)">Pricing:</span>{" "}
-                        {getPricingLabel(booking.pricingType)}
-                      </p>
-
                       <p>
                         <span className="text-(--color-text-muted)">Unit price:</span>{" "}
                         {formatPrice(booking.unitPricePence)}

@@ -37,10 +37,18 @@ function getStatusMessage(status: string, paymentStatus: string) {
     };
   }
 
-  if (status === "CANCELLED" || status === "REFUNDED") {
+  if (status === "REFUNDED" || paymentStatus === "REFUNDED") {
     return {
       title: "Booking cancelled",
-      message: "This booking has been cancelled or refunded.",
+      message: "This booking has been cancelled and refunded.",
+      badgeClass: "border-red-200 bg-red-50 text-red-800",
+    };
+  }
+
+  if (status === "CANCELLED") {
+    return {
+      title: "Booking cancelled",
+      message: "This booking has been cancelled without a refund.",
       badgeClass: "border-red-200 bg-red-50 text-red-800",
     };
   }
@@ -50,10 +58,6 @@ function getStatusMessage(status: string, paymentStatus: string) {
     message: "Please contact the team if you need help with this booking.",
     badgeClass: "border-gray-200 bg-gray-50 text-gray-800",
   };
-}
-
-function getPricingLabel(pricingType: string) {
-  return pricingType === "MEMBER" ? "Member price" : "Standard price";
 }
 
 function buildVenueAddress(booking: {
@@ -157,11 +161,15 @@ export default async function AccountBookingDetailPage({
 
       </div>
 
-      {query?.cancel === "cancelled" || query?.cancel === "error" ? (
-        <Alert variant={query.cancel === "cancelled" ? "success" : "error"}>
-          {query.cancel === "cancelled"
-            ? "Your booking has been cancelled and refunded."
-            : "This booking could not be cancelled. Please contact the team if you need help."}
+      {query?.cancel === "cancelled" ||
+      query?.cancel === "refunded" ||
+      query?.cancel === "error" ? (
+        <Alert variant={query.cancel === "error" ? "error" : "success"}>
+          {query.cancel === "refunded"
+            ? "Your booking has been cancelled and a full refund has been issued."
+            : query.cancel === "cancelled"
+              ? "Your booking has been cancelled. As the cancellation was made within 24 hours of the session, no refund has been issued."
+              : "This booking could not be cancelled. Please contact the team if you need help."}
         </Alert>
       ) : null}
 
@@ -206,10 +214,6 @@ export default async function AccountBookingDetailPage({
               label="Price per child"
               value={formatPrice(booking.unitPricePence)}
             />
-            <DetailRow
-              label="Pricing type"
-              value={getPricingLabel(booking.pricingType)}
-            />
             <DetailRow label="Children booked" value={booking.childCount} />
             <DetailRow label="Booking status" value={booking.status} />
             <DetailRow label="Payment status" value={booking.paymentStatus} />
@@ -228,12 +232,19 @@ export default async function AccountBookingDetailPage({
             <DetailRow label="Name" value={booking.parentName} />
             <DetailRow label="Email" value={booking.parentEmail} />
             <DetailRow label="Phone" value={booking.parentPhone ?? "—"} />
+          </div>
+        </Card>
+
+        <Card className="border-(--color-warning-border) bg-(--color-warning-soft)">
+          <h2 className="text-lg font-semibold">Emergency contact</h2>
+
+          <div className="mt-4">
             <DetailRow
-              label="Emergency contact"
+              label="Name"
               value={booking.emergencyContactName ?? "—"}
             />
             <DetailRow
-              label="Emergency phone"
+              label="Phone"
               value={booking.emergencyContactPhone ?? "—"}
             />
           </div>
@@ -280,6 +291,7 @@ export default async function AccountBookingDetailPage({
               <AccountCancelBookingForm
                 bookingReference={booking.bookingReference}
                 token={booking.bookingAccessToken}
+                isRefundable={cancellation.isRefundable}
               />
             ) : (
               <p className="text-sm text-(--color-danger)">

@@ -22,10 +22,6 @@ function getStatusClass(status: string) {
   return "border-gray-200 bg-gray-50 text-gray-800";
 }
 
-function getPricingLabel(pricingType: string) {
-  return pricingType === "MEMBER" ? "Member price" : "Standard price";
-}
-
 export default async function AccountBookingsPage() {
   const session = await getParentSession();
 
@@ -105,18 +101,11 @@ export default async function AccountBookingsPage() {
                 </span>
               </div>
 
-              <div className="mt-4 grid gap-3 text-sm text-(--color-text-secondary) sm:grid-cols-4">
+              <div className="mt-4 grid gap-3 text-sm text-(--color-text-secondary) sm:grid-cols-3">
                 <div>
                   <p className="text-(--color-text-muted)">Children</p>
                   <p className="font-medium text-(--color-text-primary)">
                     {booking.childCount}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-(--color-text-muted)">Pricing</p>
-                  <p className="font-medium text-(--color-text-primary)">
-                    {getPricingLabel(booking.pricingType)}
                   </p>
                 </div>
 

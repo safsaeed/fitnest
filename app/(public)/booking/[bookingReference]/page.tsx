@@ -41,10 +41,19 @@ function getStatusMessage(status: string, paymentStatus: string) {
     };
   }
 
-  if (status === "CANCELLED" || status === "REFUNDED") {
+  if (status === "REFUNDED" || paymentStatus === "REFUNDED") {
     return {
       title: "Booking cancelled",
-      message: "This booking has been cancelled or refunded.",
+      message: "This booking has been cancelled and refunded.",
+      badgeClass:
+        "bg-(--color-danger-soft) border-(--color-danger-border) text-(--color-danger)",
+    };
+  }
+
+  if (status === "CANCELLED") {
+    return {
+      title: "Booking cancelled",
+      message: "This booking has been cancelled without a refund.",
       badgeClass:
         "bg-(--color-danger-soft) border-(--color-danger-border) text-(--color-danger)",
     };
@@ -134,14 +143,18 @@ export default async function BookingReferencePage({
         </ButtonLink>
 
         <div className="mt-6 flex flex-col gap-4">
-          {query?.cancel === "cancelled" || query?.cancel === "error" ? (
+          {query?.cancel === "cancelled" ||
+          query?.cancel === "refunded" ||
+          query?.cancel === "error" ? (
             <Alert
-              variant={`${query?.cancel === "cancelled" ? "success" : "error"}`}
+              variant={`${query?.cancel === "error" ? "error" : "success"}`}
             >
               <p>
-                {query?.cancel === "cancelled"
-                  ? "Your booking has been cancelled and refunded."
-                  : "This booking could not be cancelled. Please contact the team if you need help."}
+                {query?.cancel === "refunded"
+                  ? "Your booking has been cancelled and a full refund has been issued."
+                  : query?.cancel === "cancelled"
+                    ? "Your booking has been cancelled. As the cancellation was made within 24 hours of the session, no refund has been issued."
+                    : "This booking could not be cancelled. Please contact the team if you need help."}
               </p>
             </Alert>
           ) : null}
@@ -223,6 +236,7 @@ export default async function BookingReferencePage({
                 <CancelBookingForm
                   bookingReference={booking.bookingReference}
                   token={token}
+                  isRefundable={cancellation.isRefundable}
                 />
               ) : (
                 <p className="mt-2 text-sm text-(--color-danger)">
@@ -240,6 +254,20 @@ export default async function BookingReferencePage({
               <SummaryRow label="Name" value={booking.parentName} />
               <SummaryRow label="Email" value={booking.parentEmail} />
               <SummaryRow label="Phone" value={booking.parentPhone ?? "—"} />
+            </Card>
+
+            <Card className="border-(--color-warning-border) bg-(--color-warning-soft)">
+              <h2 className="mb-4 text-lg font-semibold">
+                Emergency contact
+              </h2>
+              <SummaryRow
+                label="Name"
+                value={booking.emergencyContactName ?? "—"}
+              />
+              <SummaryRow
+                label="Phone"
+                value={booking.emergencyContactPhone ?? "—"}
+              />
             </Card>
 
             <Card>

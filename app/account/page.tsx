@@ -4,40 +4,13 @@ import { getParentSession } from "@/lib/parent-auth";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { Alert } from "@/components/ui/alert";
 
 function formatDateTime(date: Date) {
   return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
-}
-
-function getMembershipLabel(status?: string | null) {
-  if (!status) {
-    return "No membership";
-  }
-
-  if (status === "ACTIVE") {
-    return "Active";
-  }
-
-  if (status === "PAST_DUE") {
-    return "Payment issue";
-  }
-
-  if (status === "CANCELLED") {
-    return "Cancelled";
-  }
-
-  if (status === "INCOMPLETE") {
-    return "Incomplete";
-  }
-
-  if (status === "UNPAID") {
-    return "Unpaid";
-  }
-
-  return status;
 }
 
 export default async function AccountDashboardPage() {
@@ -60,7 +33,6 @@ export default async function AccountDashboardPage() {
           createdAt: "asc",
         },
       },
-      membership: true,
       bookings: {
         include: {
           session: {
@@ -86,49 +58,26 @@ export default async function AccountDashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome, ${parentUser.name}`}
-        description="Manage your children, bookings and membership."
+        description="Manage your children and bookings in one place."
       />
 
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Membership</h2>
-            <p className="mt-1 text-sm text-(--color-text-secondary)">
-              Membership is £10/month and gives discounted session prices when
-              active.
-            </p>
+      {!parentUser.defaultEmergencyContactName ||
+      !parentUser.defaultEmergencyContactPhone ? (
+        <Alert>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">Emergency contact required</p>
+              <p className="mt-1">
+                Add an emergency contact to your profile. You will still need
+                to confirm these details whenever you make a booking.
+              </p>
+            </div>
+            <ButtonLink href="/account/profile" variant="secondary" size="sm">
+              Update profile
+            </ButtonLink>
           </div>
-
-          <ButtonLink
-            href="/account/membership"
-          >
-            View membership
-          </ButtonLink>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-(--color-brand-border) bg-(--color-brand-soft) p-4 text-sm text-(--color-text-secondary)">
-          <p>
-            Current status:{" "}
-            <span className="font-medium">
-              {getMembershipLabel(parentUser.membership?.status)}
-            </span>
-          </p>
-
-          {parentUser.membership?.currentPeriodEnd && (
-            <p className="mt-1">
-              Current period ends:{" "}
-              {formatDateTime(parentUser.membership.currentPeriodEnd)}
-            </p>
-          )}
-
-          {parentUser.membership?.cancelAtPeriodEnd && (
-            <p className="mt-1 text-amber-700">
-              Cancellation is scheduled. Benefits remain until the end of the
-              current paid period.
-            </p>
-          )}
-        </div>
-      </Card>
+        </Alert>
+      ) : null}
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -222,7 +171,6 @@ export default async function AccountDashboardPage() {
                     <p className="mt-1 text-(--color-text-secondary)">
                       {booking.status} / {booking.paymentStatus}
                     </p>
-                    <p className="mt-1 text-(--color-text-secondary)">{booking.pricingType}</p>
                   </div>
                 </div>
               </div>

@@ -31,7 +31,6 @@ export type AdminSessionItem = {
   endsAt: Date;
   capacity: number;
   pricePence: number;
-  memberPricePence: number | null;
   minAge: number | null;
   maxAge: number | null;
   isActive: boolean;
@@ -188,16 +187,8 @@ export function SessionOccurrenceCard({
           value={`${bookedChildren} / ${session.capacity}`}
         />
         <AdminListMetaItem
-          label="Standard price"
+          label="Price"
           value={formatPrice(session.pricePence)}
-        />
-        <AdminListMetaItem
-          label="Member price"
-          value={
-            session.memberPricePence !== null
-              ? formatPrice(session.memberPricePence)
-              : "—"
-          }
         />
       </AdminListMeta>
     </AdminListCard>

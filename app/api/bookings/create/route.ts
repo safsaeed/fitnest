@@ -4,12 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { parseBookingFormData } from "@/lib/booking-validation";
 import { generateBookingReference } from "@/lib/booking-reference";
-import { validateBookingAvailability } from "@/lib/availability";
+import { validateBookingCapacity } from "@/lib/booking-capacity";
 import { generateBookingAccessToken } from "@/lib/booking-access-token";
 import { formatDateTime } from "@/lib/formatters";
 import { getFormString } from "@/lib/form-data";
 import { getParentSession } from "@/lib/parent-auth";
 import { calculateBookingPrice } from "@/lib/pricing";
+import { calculateAgeAtDate } from "@/lib/staffing";
 
 function redirectWithError({
   request,
@@ -33,21 +34,6 @@ function redirectWithError({
   url.searchParams.set("error", error);
 
   return NextResponse.redirect(url, 303);
-}
-
-function calculateAgeAtDate(dateOfBirth: Date, sessionDate: Date) {
-  let age = sessionDate.getFullYear() - dateOfBirth.getFullYear();
-
-  const hasHadBirthdayThisYear =
-    sessionDate.getMonth() > dateOfBirth.getMonth() ||
-    (sessionDate.getMonth() === dateOfBirth.getMonth() &&
-      sessionDate.getDate() >= dateOfBirth.getDate());
-
-  if (!hasHadBirthdayThisYear) {
-    age--;
-  }
-
-  return age;
 }
 
 function childMeetsSessionAgeRequirement({
@@ -127,6 +113,11 @@ export async function POST(request: Request) {
         },
         select: {
           childCount: true,
+          children: {
+            select: {
+              dateOfBirth: true,
+            },
+          },
         },
       },
     },
@@ -147,9 +138,6 @@ export async function POST(request: Request) {
           where: {
             id: parentSession.parentUserId,
             isActive: true,
-          },
-          include: {
-            membership: true,
           },
         })
       : null;
@@ -185,25 +173,6 @@ export async function POST(request: Request) {
       venueId: input.venueId,
       sessionId: input.sessionId,
       error: "One or more selected children could not be found.",
-    });
-  }
-
-  const requestedChildCount =
-    input.bookingMode === "account"
-      ? selectedParentChildren.length
-      : input.children.length;
-
-  const availabilityCheck = validateBookingAvailability({
-    session,
-    requestedChildCount,
-  });
-
-  if (!availabilityCheck.ok) {
-    return redirectWithError({
-      request,
-      venueId: input.venueId,
-      sessionId: input.sessionId,
-      error: availabilityCheck.reason,
     });
   }
 
@@ -296,6 +265,20 @@ export async function POST(request: Request) {
           medicalNotes: child.medicalNotes,
         }));
 
+  const capacityCheck = validateBookingCapacity({
+    session,
+    requestedChildren: childrenToCreate,
+  });
+
+  if (!capacityCheck.ok) {
+    return redirectWithError({
+      request,
+      venueId: input.venueId,
+      sessionId: input.sessionId,
+      error: capacityCheck.reason,
+    });
+  }
+
   const appUrl = process.env.APP_URL;
 
   if (!appUrl) {
@@ -304,7 +287,6 @@ export async function POST(request: Request) {
 
   const priceSummary = calculateBookingPrice({
     session,
-    membership: parentUser?.membership ?? null,
     childCount: childrenToCreate.length,
   });
 
@@ -313,12 +295,6 @@ export async function POST(request: Request) {
     parentUser?.email ?? input.parentEmail
   ).toLowerCase();
   const bookingParentPhone = parentUser?.phone ?? input.parentPhone;
-
-  const bookingEmergencyContactName =
-    parentUser?.defaultEmergencyContactName ?? bookingParentName;
-
-  const bookingEmergencyContactPhone =
-    parentUser?.defaultEmergencyContactPhone ?? bookingParentPhone;
 
   const booking = await prisma.booking.create({
     data: {
@@ -332,8 +308,8 @@ export async function POST(request: Request) {
       parentEmail: bookingParentEmail,
       parentPhone: bookingParentPhone,
 
-      emergencyContactName: bookingEmergencyContactName,
-      emergencyContactPhone: bookingEmergencyContactPhone,
+      emergencyContactName: input.emergencyContactName,
+      emergencyContactPhone: input.emergencyContactPhone,
 
       status: "PENDING",
       paymentStatus: "PENDING",
@@ -346,7 +322,7 @@ export async function POST(request: Request) {
 
       consentAccepted: true,
       consentAcceptedAt: new Date(),
-      consentTextVersion: "v1",
+      consentTextVersion: "v2",
 
       marketingOptIn: input.marketingOptIn === "on",
 

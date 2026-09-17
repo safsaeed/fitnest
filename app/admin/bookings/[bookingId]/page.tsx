@@ -28,40 +28,8 @@ function getStatusBadgeClass(status: string) {
   return "bg-(--color-danger-soft) text-(--color-danger)";
 }
 
-function getPricingLabel(pricingType: string) {
-  return pricingType === "MEMBER" ? "Member price" : "Standard price";
-}
-
 function getBookingSourceLabel(parentUserId: string | null) {
   return parentUserId ? "Account booking" : "Guest booking";
-}
-
-function getMembershipLabel(status?: string | null) {
-  if (!status) {
-    return "No membership";
-  }
-
-  if (status === "ACTIVE") {
-    return "Active";
-  }
-
-  if (status === "INCOMPLETE") {
-    return "Incomplete";
-  }
-
-  if (status === "PAST_DUE") {
-    return "Past due";
-  }
-
-  if (status === "UNPAID") {
-    return "Unpaid";
-  }
-
-  if (status === "CANCELLED") {
-    return "Cancelled";
-  }
-
-  return status;
 }
 
 function buildPublicBookingUrl({
@@ -95,11 +63,7 @@ export default async function BookingDetailPage({
           parentChild: true,
         },
       },
-      parentUser: {
-        include: {
-          membership: true,
-        },
-      },
+      parentUser: true,
       session: {
         include: {
           venue: true,
@@ -114,7 +78,7 @@ export default async function BookingDetailPage({
 
   const cancellation = getCancellationStatus(booking.session.startsAt);
 
-  const canCancelAndRefund =
+  const canCancel =
     booking.status === "CONFIRMED" &&
     booking.paymentStatus === "PAID" &&
     cancellation.canCancel;
@@ -144,7 +108,7 @@ export default async function BookingDetailPage({
           </h1>
 
           <p className="mb-3 flex items-center gap-2 text-sm text-(--color-text-secondary)">
-            View parent, child, session, payment and membership details.
+            View parent, child, session and payment details.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -160,15 +124,6 @@ export default async function BookingDetailPage({
               {getBookingSourceLabel(booking.parentUserId)}
             </span>
 
-            <span
-              className={`rounded-md border px-2 py-1 text-sm ${
-                booking.pricingType === "MEMBER"
-                  ? "border-green-200 bg-green-50 text-green-800"
-                  : "border-gray-200 bg-gray-50 text-gray-700"
-              }`}
-            >
-              {getPricingLabel(booking.pricingType)}
-            </span>
           </div>
         </div>
 
@@ -228,12 +183,6 @@ export default async function BookingDetailPage({
                   label="Account email"
                   value={booking.parentUser.email}
                 />
-                <SummaryRow
-                  label="Membership"
-                  value={getMembershipLabel(
-                    booking.parentUser.membership?.status,
-                  )}
-                />
               </>
             ) : null}
           </Card>
@@ -258,10 +207,6 @@ export default async function BookingDetailPage({
 
           <Card>
             <h2 className="mb-4 text-lg font-semibold">Payment details</h2>
-            <SummaryRow
-              label="Pricing type"
-              value={getPricingLabel(booking.pricingType)}
-            />
             <SummaryRow
               label="Price per child"
               value={formatPrice(booking.unitPricePence)}
@@ -408,7 +353,7 @@ export default async function BookingDetailPage({
           />
 
           <div className="mt-4">
-            {canCancelAndRefund ? (
+            {canCancel ? (
               <ConfirmActionDialog
                 formAction="/api/bookings/cancel"
                 formMethod="POST"
@@ -422,16 +367,30 @@ export default async function BookingDetailPage({
                     value: booking.bookingAccessToken,
                   },
                 ]}
-                title="Cancel and refund this booking?"
-                description="This will cancel the booking and start a refund. This action cannot usually be undone."
-                confirmLabel="Yes, cancel and refund"
+                title={
+                  cancellation.isRefundable
+                    ? "Cancel and refund this booking?"
+                    : "Cancel this booking?"
+                }
+                description={
+                  cancellation.isRefundable
+                    ? "This will cancel the booking and issue a full refund. This action cannot usually be undone."
+                    : "This cancellation is within 24 hours of the session, so no refund will be issued. This action cannot usually be undone."
+                }
+                confirmLabel={
+                  cancellation.isRefundable
+                    ? "Yes, cancel and refund"
+                    : "Yes, cancel booking"
+                }
                 cancelLabel="Keep booking"
               >
-                Cancel booking and refund
+                {cancellation.isRefundable
+                  ? "Cancel booking and refund"
+                  : "Cancel booking"}
               </ConfirmActionDialog>
             ) : (
               <p className="text-sm text-(--color-text-secondary)">
-                This booking cannot currently be cancelled/refunded online.
+                This booking can no longer be cancelled online.
               </p>
             )}
           </div>

@@ -2,12 +2,20 @@
 
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/form-field";
-import { yearsAgoInputValue } from "@/lib/date-time";
 import { formatAgeRequirement, formatPrice } from "@/lib/formatters";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { LoadingForm } from "@/components/ui/loading-form";
 import { ApiSubmitButton } from "@/components/ui/api-submit-button";
+import {
+  earliestDateOfBirthForAge,
+  formatAdditionalChildAgeAvailability,
+  getBookingStaffingSelectionState,
+  getGuestBookingStaffingState,
+  getGuestChildStaffingRestriction,
+  latestDateOfBirthForAge,
+} from "@/lib/booking-staffing";
+import { PHONE_INPUT_PATTERN } from "@/lib/validation/contact";
 
 type ChildFormState = {
   firstName: string;
@@ -28,22 +36,24 @@ type SavedChildForBooking = {
   medicalNotes: string | null;
   isEligible: boolean;
   eligibilityReason: string | null;
+  staffingUnits: number;
 };
 
 type DefaultParentForBooking = {
   name: string;
   email: string;
   phone: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
 };
 
 type BookingFormProps = {
   venueId: string;
   sessionId: string;
   pricePence: number;
-  standardPricePence: number;
-  memberPricePence: number | null;
-  pricingType: "STANDARD" | "MEMBER";
-  spacesRemaining: number;
+  headcountSpacesRemaining: number;
+  staffingUnitsRemaining: number;
+  sessionStartsAt: string;
   minAgeYears: number;
   maxAgeYears: number | null;
   defaultParent: DefaultParentForBooking | null;
@@ -63,8 +73,6 @@ function createEmptyChild(): ChildFormState {
   };
 }
 
-const PHONE_PATTERN = "[+()0-9\\s-]{7,20}";
-
 function formatChildName(child: SavedChildForBooking) {
   return [child.firstName, child.lastName].filter(Boolean).join(" ");
 }
@@ -79,10 +87,9 @@ export function BookingForm({
   venueId,
   sessionId,
   pricePence,
-  standardPricePence,
-  memberPricePence,
-  pricingType,
-  spacesRemaining,
+  headcountSpacesRemaining,
+  staffingUnitsRemaining,
+  sessionStartsAt,
   minAgeYears,
   maxAgeYears,
   defaultParent,
@@ -102,6 +109,12 @@ export function BookingForm({
   const [confirmParentEmail, setConfirmParentEmail] = useState(
     defaultParent?.email ?? "",
   );
+  const [emergencyContactName, setEmergencyContactName] = useState(
+    defaultParent?.emergencyContactName ?? "",
+  );
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(
+    defaultParent?.emergencyContactPhone ?? "",
+  );
 
   const [selectedParentChildIds, setSelectedParentChildIds] = useState<
     string[]
@@ -111,14 +124,17 @@ export function BookingForm({
     createEmptyChild(),
   ]);
 
-  const latestAllowedDateOfBirth = useMemo(
-    () => yearsAgoInputValue(minAgeYears),
-    [minAgeYears],
+  const sessionDate = useMemo(
+    () => new Date(sessionStartsAt),
+    [sessionStartsAt],
   );
 
   const earliestAllowedDateOfBirth = useMemo(
-    () => (maxAgeYears === null ? undefined : yearsAgoInputValue(maxAgeYears)),
-    [maxAgeYears],
+    () =>
+      maxAgeYears === null
+        ? undefined
+        : earliestDateOfBirthForAge(sessionDate, maxAgeYears),
+    [maxAgeYears, sessionDate],
   );
 
   const ageRangeLabel = useMemo(
@@ -130,6 +146,59 @@ export function BookingForm({
     ? selectedParentChildIds.length
     : children.length;
 
+  const guestDateOfBirthValues = children.map((child) => child.dateOfBirth);
+  const guestStaffingState = getGuestBookingStaffingState({
+    dateOfBirthValues: guestDateOfBirthValues,
+    sessionDate,
+    staffingUnitsRemaining,
+    headcountSpacesRemaining,
+    minAge: minAgeYears,
+    maxAge: maxAgeYears,
+  });
+
+  const selectedStaffingUnits = isAccountBooking
+    ? selectedParentChildIds.reduce((total, childId) => {
+        const child = savedChildren.find(
+          (savedChild) => savedChild.id === childId,
+        );
+        return total + (child?.staffingUnits ?? 0);
+      }, 0)
+    : guestStaffingState.selectedStaffingUnits;
+
+  const staffingSelection = getBookingStaffingSelectionState({
+    selectedStaffingUnits,
+    staffingUnitsRemaining,
+    minAge: minAgeYears,
+    maxAge: maxAgeYears,
+  });
+  const {
+    remainingStaffingUnits,
+    staffingExceeded,
+    bookableAgeGroups,
+    isDynamicallyAgeRestricted,
+  } = staffingSelection;
+  const hasSelectedChildren = isAccountBooking
+    ? selectedParentChildIds.length > 0
+    : guestStaffingState.hasSelectedChildren;
+  const selectionUsesRemainingStaffing =
+    !staffingExceeded &&
+    hasSelectedChildren &&
+    bookableAgeGroups.length === 0;
+  const staffingAvailabilityMessage = staffingExceeded
+    ? "This selection exceeds the one-staff limit. Remove a child or choose an older age where appropriate."
+    : formatAdditionalChildAgeAvailability({
+        groups: bookableAgeGroups,
+        isDynamicallyRestricted: isDynamicallyAgeRestricted,
+        hasSelectedChildren,
+        minAge: minAgeYears,
+        maxAge: maxAgeYears,
+      });
+  const canAddGuestChild = guestStaffingState.canAddChild;
+  const guestHeadcountLimitReached =
+    children.length >= headcountSpacesRemaining;
+  const guestStaffingAddLimitReached =
+    !canAddGuestChild && !guestHeadcountLimitReached;
+
   const totalPricePence = useMemo(
     () => selectedChildCount * pricePence,
     [selectedChildCount, pricePence],
@@ -140,7 +209,7 @@ export function BookingForm({
     parentEmail.toLowerCase() !== confirmParentEmail.toLowerCase();
 
   function addChild() {
-    if (children.length >= spacesRemaining) {
+    if (!canAddGuestChild) {
       return;
     }
 
@@ -177,7 +246,19 @@ export function BookingForm({
         return current.filter((id) => id !== child.id);
       }
 
-      if (current.length >= spacesRemaining) {
+      if (current.length >= headcountSpacesRemaining) {
+        return current;
+      }
+
+      const selectedUnits = current.reduce((total, childId) => {
+        const selectedChild = savedChildren.find(
+          (savedChild) => savedChild.id === childId,
+        );
+
+        return total + (selectedChild?.staffingUnits ?? 0);
+      }, 0);
+
+      if (selectedUnits + child.staffingUnits > staffingUnitsRemaining) {
         return current;
       }
 
@@ -263,7 +344,7 @@ export function BookingForm({
             required
             minLength={7}
             maxLength={20}
-            pattern={PHONE_PATTERN}
+            pattern={PHONE_INPUT_PATTERN}
             title="Enter a valid phone number using numbers, spaces, +, -, or brackets."
             autoComplete="tel"
             inputMode="tel"
@@ -315,6 +396,48 @@ export function BookingForm({
         </div>
       </section>
 
+      <section className="mt-8 rounded-lg border border-(--color-warning) bg-(--color-warning-soft) p-4 sm:p-5">
+        <h2 className="text-lg font-semibold">Emergency contact</h2>
+        <p className="mt-1 text-sm text-(--color-text-secondary)">
+          Required for this booking. Please give the details of someone the
+          team can contact in an emergency.
+        </p>
+
+        {isAccountBooking ? (
+          <p className="mt-2 text-sm text-(--color-text-secondary)">
+            These details are prefilled from your profile when available.
+            Changes here apply to this booking only.
+          </p>
+        ) : null}
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <InputField
+            label="Emergency contact name"
+            name="emergencyContactName"
+            type="text"
+            required
+            minLength={2}
+            maxLength={100}
+            value={emergencyContactName}
+            onChange={(event) => setEmergencyContactName(event.target.value)}
+          />
+
+          <InputField
+            label="Emergency contact phone"
+            name="emergencyContactPhone"
+            type="tel"
+            required
+            minLength={7}
+            maxLength={20}
+            pattern={PHONE_INPUT_PATTERN}
+            title="Enter a valid phone number using numbers, spaces, +, -, or brackets."
+            inputMode="tel"
+            value={emergencyContactPhone}
+            onChange={(event) => setEmergencyContactPhone(event.target.value)}
+          />
+        </div>
+      </section>
+
       <section>
         <div className="mt-8 flex items-start justify-between gap-4">
           <div>
@@ -334,6 +457,24 @@ export function BookingForm({
               Add child
             </Link>
           ) : null}
+        </div>
+
+        <div
+          aria-live="polite"
+          className={`mt-4 rounded-lg border p-4 text-sm ${
+            staffingExceeded
+              ? "border-red-200 bg-red-50 text-red-800"
+              : selectionUsesRemainingStaffing
+                ? "border-green-200 bg-green-50 text-green-800"
+                : isDynamicallyAgeRestricted || bookableAgeGroups.length === 0
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-blue-100 bg-blue-50 text-blue-800"
+          }`}
+        >
+          <p className="font-medium">
+            Age availability for additional children
+          </p>
+          <p className="mt-1">{staffingAvailabilityMessage}</p>
         </div>
 
         {isAccountBooking ? (
@@ -369,9 +510,12 @@ export function BookingForm({
                   const selected = selectedParentChildIds.includes(child.id);
                   const capacityDisabled =
                     !selected &&
-                    selectedParentChildIds.length >= spacesRemaining;
+                    selectedParentChildIds.length >= headcountSpacesRemaining;
+                  const staffingDisabled =
+                    !selected && child.staffingUnits > remainingStaffingUnits;
 
-                  const disabled = !child.isEligible || capacityDisabled;
+                  const disabled =
+                    !child.isEligible || capacityDisabled || staffingDisabled;
 
                   return (
                     <label
@@ -416,6 +560,12 @@ export function BookingForm({
                               No more spaces can be selected for this session.
                             </p>
                           ) : null}
+
+                          {staffingDisabled && !capacityDisabled ? (
+                            <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                              This child’s age does not fit the remaining staffing availability.
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     </label>
@@ -424,7 +574,7 @@ export function BookingForm({
               </>
             )}
 
-            {selectedParentChildIds.length >= spacesRemaining && (
+            {selectedParentChildIds.length >= headcountSpacesRemaining && (
               <p className="text-sm text-(--color-warning)">
                 You have selected all remaining spaces for this session.
               </p>
@@ -433,27 +583,50 @@ export function BookingForm({
         ) : (
           <>
             <div className="mt-4 space-y-6">
-              {children.map((child, index) => (
-                <div
-                  key={index}
-                  className="rounded-lg border border-gray-200 bg-[#fdfdfd] p-4"
-                >
-                  <div className="mb-4 flex items-center justify-between gap-4">
-                    <h3 className="h-7 font-medium">Child {index + 1}</h3>
+              {children.map((child, index) => {
+                const childStaffingRestriction =
+                  getGuestChildStaffingRestriction({
+                    childIndex: index,
+                    dateOfBirthValues: guestDateOfBirthValues,
+                    sessionDate,
+                    staffingUnitsRemaining,
+                    headcountSpacesRemaining,
+                    minAge: minAgeYears,
+                    maxAge: maxAgeYears,
+                  });
+                const dynamicMinimumAge =
+                  childStaffingRestriction.minimumAge;
+                const dynamicLatestAllowedDateOfBirth =
+                  latestDateOfBirthForAge(
+                    sessionDate,
+                    dynamicMinimumAge,
+                  );
+                const dateOfBirthHint =
+                  dynamicMinimumAge > minAgeYears
+                    ? `${formatAgeRequirement(dynamicMinimumAge, maxAgeYears)} Current staffing availability requires this age.`
+                    : ageRangeLabel;
 
-                    {children.length > 1 && (
-                      <Button
-                        type="button"
-                        onClick={() => removeChild(index)}
-                        variant="destructive"
-                        size="sm"
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
+                return (
+                  <div
+                    key={index}
+                    className="rounded-lg border border-gray-200 bg-[#fdfdfd] p-4"
+                  >
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      <h3 className="h-7 font-medium">Child {index + 1}</h3>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                      {children.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => removeChild(index)}
+                          variant="destructive"
+                          size="sm"
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
                     <InputField
                       label="First name"
                       name={`children[${index}][firstName]`}
@@ -488,12 +661,12 @@ export function BookingForm({
                       type="date"
                       required
                       min={earliestAllowedDateOfBirth}
-                      max={latestAllowedDateOfBirth}
+                      max={dynamicLatestAllowedDateOfBirth}
                       value={child.dateOfBirth}
                       onChange={(event) =>
                         updateChild(index, "dateOfBirth", event.target.value)
                       }
-                      hint={ageRangeLabel}
+                      hint={dateOfBirthHint}
                     />
 
                     <div>
@@ -590,24 +763,32 @@ export function BookingForm({
                         No medical notes
                       </label>
                     </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <Button
               type="button"
               onClick={addChild}
-              disabled={children.length >= spacesRemaining}
+              disabled={!canAddGuestChild}
               variant="secondary"
               className="mt-8 w-full"
             >
               Add child
             </Button>
 
-            {children.length >= spacesRemaining && (
+            {guestHeadcountLimitReached && (
               <p className="mt-3 text-sm text-(--color-warning)">
                 You have selected all remaining spaces for this session.
+              </p>
+            )}
+
+            {guestStaffingAddLimitReached && (
+              <p className="mt-3 text-sm text-(--color-warning)">
+                Another child cannot be added because the current children use
+                the remaining staffing availability.
               </p>
             )}
           </>
@@ -621,23 +802,8 @@ export function BookingForm({
         </div>
 
         <div className="mt-2 flex justify-between gap-4 text-sm">
-          <span className="text-(--color-text-secondary)">Standard price</span>
-          <span className="font-medium">{formatPrice(standardPricePence)}</span>
-        </div>
-
-        {memberPricePence !== null ? (
-          <div className="mt-2 flex justify-between gap-4 text-sm">
-            <span className="text-(--color-text-secondary)">Member price</span>
-            <span className="font-medium">{formatPrice(memberPricePence)}</span>
-          </div>
-        ) : null}
-
-        <div className="mt-2 flex justify-between gap-4 text-sm">
-          <span className="text-(--color-text-secondary)">Price applied</span>
-          <span className="font-medium">
-            {formatPrice(pricePence)}{" "}
-            {pricingType === "MEMBER" ? "(member)" : "(standard)"}
-          </span>
+          <span className="text-(--color-text-secondary)">Price per child</span>
+          <span className="font-medium">{formatPrice(pricePence)}</span>
         </div>
 
         <div className="mt-3 flex justify-between gap-4 border-t border-gray-200 pt-3">
@@ -673,7 +839,10 @@ export function BookingForm({
         <ApiSubmitButton
           type="submit"
           className="mt-2 w-full"
-          disabled={isAccountBooking && selectedParentChildIds.length === 0}
+          disabled={
+            staffingExceeded ||
+            (isAccountBooking && selectedParentChildIds.length === 0)
+          }
         >
           Continue to payment
         </ApiSubmitButton>

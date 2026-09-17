@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/form-field";
 import { PageHeader } from "@/components/ui/page-header";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { PHONE_INPUT_PATTERN } from "@/lib/validation/contact";
 
 type AccountProfilePageProps = {
   searchParams?: Promise<{
@@ -25,8 +26,12 @@ function getErrorMessage(error?: string) {
     return "Enter a valid phone number.";
   }
 
+  if (error === "missing-emergency-contact") {
+    return "Emergency contact name and phone number are required.";
+  }
+
   if (error === "invalid-emergency-name") {
-    return "Emergency contact name is too long.";
+    return "Enter a valid emergency contact name.";
   }
 
   if (error === "invalid-emergency-phone") {
@@ -76,35 +81,72 @@ export default async function AccountProfilePage({
 
       <Card>
         <form action={updateParentProfile} className="space-y-6">
-          <InputField label="Email address" name="email" type="email" value={parentUser.email} disabled hint="Contact Fitnest Studios if you need to change your email address." />
-          <InputField label="Parent / guardian name" name="name" minLength={2} maxLength={100} defaultValue={parentUser.name} required />
-          <InputField label="Phone" name="phone" type="tel" maxLength={20} defaultValue={parentUser.phone ?? ""} />
+          <InputField
+            label="Email address"
+            name="email"
+            type="email"
+            value={parentUser.email}
+            disabled
+            hint="Contact Fitnest Studios if you need to change your email address."
+          />
+          <InputField
+            label="Parent / guardian name"
+            name="name"
+            minLength={2}
+            maxLength={100}
+            defaultValue={parentUser.name}
+            required
+          />
+          <InputField
+            label="Phone"
+            name="phone"
+            type="tel"
+            minLength={7}
+            maxLength={20}
+            pattern={PHONE_INPUT_PATTERN}
+            title="Enter a valid phone number using numbers, spaces, +, -, or brackets."
+            inputMode="tel"
+            defaultValue={parentUser.phone ?? ""}
+          />
 
-        <div className="rounded-lg border border-(--color-brand-border) bg-(--color-brand-soft) p-4">
-          <h2 className="font-medium">
-            Default emergency contact
-          </h2>
-          <p className="mt-1 text-sm text-(--color-text-secondary)">
-            These details will be used automatically when you book from your
-            account.
-          </p>
+          <div className="rounded-lg border border-(--color-brand-border) bg-(--color-brand-soft) p-4">
+            <h2 className="font-medium">Default emergency contact</h2>
+            <p className="mt-1 text-sm text-(--color-text-secondary)">
+              Required for every booking. These details will be filled in
+              automatically when you book from your account.
+            </p>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <InputField label="Emergency contact name" name="defaultEmergencyContactName" maxLength={100} defaultValue={parentUser.defaultEmergencyContactName ?? ""} />
-            <InputField label="Emergency contact phone" name="defaultEmergencyContactPhone" type="tel" maxLength={20} defaultValue={parentUser.defaultEmergencyContactPhone ?? ""} />
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <InputField
+                label="Emergency contact name"
+                name="defaultEmergencyContactName"
+                minLength={2}
+                maxLength={100}
+                defaultValue={parentUser.defaultEmergencyContactName ?? ""}
+                required
+              />
+              <InputField
+                label="Emergency contact phone"
+                name="defaultEmergencyContactPhone"
+                type="tel"
+                minLength={7}
+                maxLength={20}
+                pattern={PHONE_INPUT_PATTERN}
+                title="Enter a valid phone number using numbers, spaces, +, -, or brackets."
+                inputMode="tel"
+                defaultValue={parentUser.defaultEmergencyContactPhone ?? ""}
+                required
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <SubmitButton>Save changes</SubmitButton>
+          <div className="flex flex-wrap items-center gap-3">
+            <SubmitButton>Save changes</SubmitButton>
 
-          <ButtonLink
-            href="/account/password"
-            variant="secondary"
-          >
-            Change password
-          </ButtonLink>
-        </div>
+            <ButtonLink href="/account/password" variant="secondary">
+              Change password
+            </ButtonLink>
+          </div>
         </form>
       </Card>
     </div>

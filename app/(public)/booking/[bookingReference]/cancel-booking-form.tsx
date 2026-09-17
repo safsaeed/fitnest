@@ -5,11 +5,13 @@ import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 type CancelBookingFormProps = {
   bookingReference: string;
   token: string;
+  isRefundable: boolean;
 };
 
 export function CancelBookingForm({
   bookingReference,
   token,
+  isRefundable,
 }: CancelBookingFormProps) {
   return (
     <ConfirmActionDialog
@@ -19,12 +21,16 @@ export function CancelBookingForm({
         { name: "bookingReference", value: bookingReference },
         { name: "token", value: token },
       ]}
-      title="Cancel and refund this booking?"
-      description="This will cancel the booking and start a refund. This action cannot usually be undone."
-      confirmLabel="Yes, cancel and refund"
+      title={isRefundable ? "Cancel and refund this booking?" : "Cancel this booking?"}
+      description={
+        isRefundable
+          ? "This will cancel the booking and issue a full refund. This action cannot usually be undone."
+          : "This cancellation is within 24 hours of the session, so no refund will be issued. This action cannot usually be undone."
+      }
+      confirmLabel={isRefundable ? "Yes, cancel and refund" : "Yes, cancel booking"}
       cancelLabel="Keep booking"
     >
-      Cancel booking and refund
+      {isRefundable ? "Cancel booking and refund" : "Cancel booking"}
     </ConfirmActionDialog>
   );
 }
