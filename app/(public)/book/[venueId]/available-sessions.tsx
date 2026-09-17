@@ -61,7 +61,7 @@ function formatSpacesRemaining(spacesRemaining: number) {
     return "Fully booked";
   }
 
-  return `${spacesRemaining} ${spacesRemaining === 1 ? "space" : "spaces"} left`;
+  return "Limited availability";
 }
 
 export function AvailableSessions({
@@ -202,10 +202,6 @@ export function AvailableSessions({
                           {firstSession.priceLabel}
                         </span>{" "}
                         <span className="text-xs">per child</span>
-                      </p>
-
-                      <p className="mt-1 text-xs text-(--color-text-muted)">
-                        Bookings close 6pm the day before the session.
                       </p>
                     </div>
                   </div>

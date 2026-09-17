@@ -63,7 +63,15 @@ export default function TermsPage() {
 
             <ul className="mt-3 list-disc space-y-3 pl-6 text-(--color-text-secondary)">
               <li>
-                Bookings and cancellations close at 6pm the day before the session.
+                Bookings and cancellations can be made until the session starts.
+              </li>
+              <li>
+                Cancellations made at least 24 hours before your scheduled
+                session receive a full refund.
+              </li>
+              <li>
+                Cancellations made within 24 hours of your scheduled session are
+                non-refundable.
               </li>
               <li>
                 If you are unable to attend, please contact us as soon as

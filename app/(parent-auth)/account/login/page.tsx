@@ -50,7 +50,7 @@ export default async function ParentLoginPage({
   return (
     <AuthPage
       title="Parent login"
-      description="Log in to view your bookings, saved children and membership."
+      description="Log in to view your bookings and saved children."
     >
 
         {statusMessage ? (

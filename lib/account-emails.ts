@@ -6,7 +6,6 @@ type AccountWelcomeEmailInput = {
   parentName: string;
   accountUrl: string;
   childrenUrl: string;
-  membershipUrl: string;
 };
 
 export async function sendAccountWelcomeEmail({
@@ -14,7 +13,6 @@ export async function sendAccountWelcomeEmail({
   parentName,
   accountUrl,
   childrenUrl,
-  membershipUrl,
 }: AccountWelcomeEmailInput) {
   const subject = "Welcome to your Fitnest Studios account";
 
@@ -26,15 +24,14 @@ export async function sendAccountWelcomeEmail({
 
       <p>Your parent account has been created successfully.</p>
 
-      <p>You can now save child details, view account bookings, and manage membership from your account.</p>
+      <p>You can now save child details and manage bookings from your account.</p>
 
       <p style="margin: 20px 0;">
         <a href="${accountUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">Go to my account</a>
       </p>
 
       <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 20px 0;">
-        <p style="margin: 0 0 8px;"><strong>Save child details:</strong> <a href="${childrenUrl}">${childrenUrl}</a></p>
-        <p style="margin: 0;"><strong>Membership:</strong> <a href="${membershipUrl}">${membershipUrl}</a></p>
+        <p style="margin: 0;"><strong>Save child details:</strong> <a href="${childrenUrl}">${childrenUrl}</a></p>
       </div>
 
       <p>Thanks,<br />Fitnest Studios</p>
@@ -48,11 +45,10 @@ Hi ${parentName},
 
 Your parent account has been created successfully.
 
-You can now save child details, view account bookings, and manage membership from your account.
+You can now save child details and manage bookings from your account.
 
 Account: ${accountUrl}
 Save child details: ${childrenUrl}
-Membership: ${membershipUrl}
 
 Thanks,
 Fitnest Studios

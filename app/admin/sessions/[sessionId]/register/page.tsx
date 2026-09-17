@@ -1,7 +1,16 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { calculateAgeAtDate, calculateStaffingSummary } from "@/lib/staffing";
+import {
+  calculateAgeAtDate,
+  calculateStaffingSummary,
+  getStaffingAvailability,
+} from "@/lib/staffing";
+import {
+  formatStaffingAgeRangeLabel,
+  getBookableStaffingAgeRange,
+} from "@/lib/booking-staffing";
 import { ButtonLink } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -14,10 +23,6 @@ type SessionRegisterPageProps = {
     sessionId: string;
   }>;
 };
-
-function getPricingLabel(pricingType: string) {
-  return pricingType === "MEMBER" ? "Member" : "Standard";
-}
 
 function getBookingSourceLabel(parentUserId: string | null) {
   return parentUserId ? "Account booking" : "Guest booking";
@@ -40,11 +45,6 @@ export default async function SessionRegisterPage({
         },
         include: {
           children: true,
-          parentUser: {
-            include: {
-              membership: true,
-            },
-          },
         },
         orderBy: {
           createdAt: "asc",
@@ -63,16 +63,27 @@ export default async function SessionRegisterPage({
     children,
     sessionDate: session.startsAt,
   });
+  const staffingAvailability = getStaffingAvailability({
+    children,
+    sessionDate: session.startsAt,
+    minAge: session.minAge ?? 1,
+    maxAge: session.maxAge,
+  });
 
   const bookedChildrenCount = children.length;
   const spacesRemaining = Math.max(session.capacity - bookedChildrenCount, 0);
+  const bookableSpacesRemaining = Math.min(
+    spacesRemaining,
+    staffingAvailability.maxAdditionalChildren,
+  );
+  const bookableAgeRange = getBookableStaffingAgeRange({
+    groups: staffingAvailability.bookableAgeGroups,
+    minAge: session.minAge ?? 1,
+    maxAge: session.maxAge,
+  });
 
   const accountBookingCount = session.bookings.filter(
     (booking) => booking.parentUserId,
-  ).length;
-
-  const memberBookingCount = session.bookings.filter(
-    (booking) => booking.pricingType === "MEMBER",
   ).length;
 
   const totalRevenuePence = session.bookings.reduce(
@@ -136,10 +147,14 @@ export default async function SessionRegisterPage({
 
           <Card className="sm:py-4 sm:px-4">
             <p className="text-sm text-(--color-text-secondary)">
-              Spaces available
+              Bookable spaces
             </p>
             <p className="text-lg font-semibold text-(--color-brand)">
-              {spacesRemaining}
+              Up to {bookableSpacesRemaining}
+            </p>
+            <p className="text-xs text-(--color-text-secondary)">
+              {spacesRemaining} physical{" "}
+              {spacesRemaining === 1 ? "space" : "spaces"}
             </p>
           </Card>
 
@@ -147,11 +162,12 @@ export default async function SessionRegisterPage({
             <p className="text-sm text-(--color-text-secondary)">
               Required supervisors
             </p>
-            <p className="flex justify-between gap-2 sm:block text-lg font-semibold text-(--color-brand)">
-              {staffing.requiredStaff}{" "}
-              <span className="font-normal text-sm sm:text-xs">
-                (fraction: {staffing.staffingFraction.toFixed(2)})
-              </span>
+            <p className="text-lg font-semibold text-(--color-brand)">
+              {staffing.requiredStaff}
+            </p>
+            <p className="text-xs text-(--color-text-secondary)">
+              {staffingAvailability.usedUnits} /{" "}
+              {staffingAvailability.capacityUnits} staffing units
             </p>
           </Card>
 
@@ -166,15 +182,6 @@ export default async function SessionRegisterPage({
 
           <Card className="sm:py-4 sm:px-4">
             <p className="text-sm text-(--color-text-secondary)">
-              Member-priced bookings
-            </p>
-            <p className="text-lg font-semibold text-(--color-brand)">
-              {memberBookingCount}
-            </p>
-          </Card>
-
-          <Card className="sm:py-4 sm:px-4">
-            <p className="text-sm text-(--color-text-secondary)">
               Confirmed revenue
             </p>
             <p className="text-lg font-semibold text-(--color-brand)">
@@ -182,6 +189,45 @@ export default async function SessionRegisterPage({
             </p>
           </Card>
         </div>
+
+        {staffingAvailability.isOverCapacity ? (
+          <Alert variant="error" className="mt-4">
+            <p className="font-semibold">One-staff limit exceeded</p>
+            <p className="mt-1">
+              This session is{" "}
+              {staffingAvailability.usedUnits -
+                staffingAvailability.capacityUnits} staffing units over
+              capacity and currently requires {staffing.requiredStaff}{" "}
+              supervisors.
+            </p>
+          </Alert>
+        ) : bookableSpacesRemaining === 0 ? (
+          <Alert className="mt-4">
+            <p className="font-semibold">No additional bookings available</p>
+            <p className="mt-1">
+              {spacesRemaining === 0
+                ? "The session has reached its headcount capacity."
+                : "The remaining staffing allowance cannot accommodate another child in this session’s age range."}
+            </p>
+          </Alert>
+        ) : (
+          <Alert variant="success" className="mt-4">
+            <p className="font-semibold">Within the one-staff limit</p>
+            <p className="mt-1">
+              {staffingAvailability.remainingUnits} staffing units remain. Up
+              to {bookableSpacesRemaining} additional{" "}
+              {bookableSpacesRemaining === 1 ? "child" : "children"} can be
+              booked
+              {bookableAgeRange
+                ? ` within ${formatStaffingAgeRangeLabel(
+                    bookableAgeRange.minAge,
+                    bookableAgeRange.maxAge,
+                  ).toLowerCase()}`
+                : ""}
+              .
+            </p>
+          </Alert>
+        )}
 
         <div className="mt-10">
           <h2 className="text-lg font-semibold">Staffing requirement</h2>
@@ -228,21 +274,6 @@ export default async function SessionRegisterPage({
                         {getBookingSourceLabel(booking.parentUserId)}
                       </span>
 
-                      <span
-                        className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                          booking.pricingType === "MEMBER"
-                            ? "border-green-200 bg-green-50 text-green-800"
-                            : "border-gray-200 bg-gray-50 text-gray-700"
-                        }`}
-                      >
-                        {getPricingLabel(booking.pricingType)} price
-                      </span>
-
-                      {booking.parentUser?.membership ? (
-                        <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800">
-                          Membership: {booking.parentUser.membership.status}
-                        </span>
-                      ) : null}
                     </div>
                   </div>
 

@@ -50,15 +50,17 @@ export default function AboutUsPage() {
               Wellness works better when families are part of the picture.
             </h1>
             <p className="mt-5 max-w-2xl text-(--color-text-secondary) sm:text-md">
-              We partner with fitness and sports venues to create
-              family-friendly spaces where parents can prioritise their health
-              and wellbeing while children enjoy safe, professionally
-              supervised play sessions.
+              We work with fitness venues to create family-friendly spaces where
+              parents can prioritise their health and wellbeing while children
+              enjoy safe, professionally supervised play sessions.
             </p>
           </div>
 
           <div className="rounded-lg bg-white p-6 shadow-sm">
-            <MapPin aria-hidden="true" className="h-6 w-6 text-(--color-brand)" />
+            <MapPin
+              aria-hidden="true"
+              className="h-6 w-6 text-(--color-brand)"
+            />
             <p className="mt-4 text-sm font-semibold">Our focus</p>
             <p className="mt-2 text-sm leading-6 text-(--color-text-secondary)">
               Making it easier to fit wellbeing into everyday family life.
@@ -78,14 +80,15 @@ export default function AboutUsPage() {
 
           <div className="space-y-5 text-(--color-text-secondary)">
             <p>
-              Staying active can feel difficult when family life is full. FitNest
-              Studios helps remove one of those barriers by bringing supervised
-              children&apos;s sessions into the places parents already want to go.
+              Staying active can feel difficult when family life is full.
+              FitNest Studios helps remove one of those barriers by bringing
+              supervised children&apos;s sessions into the places parents
+              already want to go.
             </p>
             <p>
-              Our mission is to help partner venues create more inclusive,
-              accessible experiences for families, and to give parents more
-              freedom to make wellbeing part of their routine.
+              Our mission is to make fitness more accessible for families,
+              helping venues create inclusive experiences while giving parents
+              the freedom to make wellbeing part of their routine.
             </p>
             <p>
               Together, we&apos;re building welcoming spaces that make wellness
@@ -128,8 +131,8 @@ export default function AboutUsPage() {
               Ready to make a little more room for wellbeing?
             </h2>
             <p className="mt-3 text-(--color-text-secondary)">
-              Browse upcoming sessions at our partner venues, or tell us where
-              you&apos;d like to see FitNest next.
+              Browse upcoming sessions near you, or tell us where you’d like to
+              see us next.
             </p>
           </div>
 

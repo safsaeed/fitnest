@@ -90,8 +90,7 @@ export default async function BookPage({ searchParams }: BookPageProps) {
           </h1>
 
           <p className="mt-2 text-sm text-(--color-text-secondary)">
-            Choose a partner venue to view available sessions and book a place
-            for your child.
+            Choose a venue to view available sessions and book a place for your child.
           </p>
         </div>
 

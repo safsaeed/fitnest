@@ -18,7 +18,7 @@ const benefits = [
     icon: CalendarDays,
     title: "Simple to fit around life",
     description:
-      "Choose a convenient session at one of our partner fitness and sports venues.",
+      "Choose a convenient session at one of the fitness venues where we provide our services.",
   },
   {
     icon: Heart,
@@ -43,8 +43,8 @@ export default function HomePage() {
 
             <p className="mt-6 max-w-xl text-(--color-text-secondary) sm:text-md">
               FitNest Studios brings supervised children&apos;s play sessions to
-              fitness and sports venues, making it easier for parents to prioritise
-              their health and wellbeing.
+              fitness venues, making it easier for parents to prioritise their
+              health and wellbeing.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -67,17 +67,6 @@ export default function HomePage() {
               Already booking with us? Create an account to save children and
               manage bookings in one place.
             </p>
-            <LoadingButtonLink
-              href="/memberships"
-              variant="ghost"
-              size="custom"
-              className="mt-3 p-0 text-sm hover:bg-transparent"
-            >
-              <span className="flex gap-2 items-center">
-                Explore membership benefits
-                <ArrowRight className="h-4 w-4" />
-              </span>
-            </LoadingButtonLink>
           </div>
 
           <aside className="rounded-lg  bg-white p-6 shadow-md sm:p-8">

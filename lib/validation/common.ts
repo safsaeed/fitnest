@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { startOfToday, yearsAgo } from "@/lib/date-time";
+import { phoneSchema } from "./contact";
 
 export const requiredString = (field = "This field") =>
   z
@@ -12,12 +13,7 @@ export const emailSchema = z
   .trim()
   .email("Enter a valid email address");
 
-export const phoneSchema = z
-  .string()
-  .trim()
-  .min(7, "Enter a valid phone number")
-  .max(20, "Phone number is too long")
-  .regex(/^[+()\d\s-]+$/, "Enter a valid phone number");
+export { phoneSchema };
 
 export const positiveInteger = (field: string, min = 1, max = 999) =>
   z.coerce

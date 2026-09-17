@@ -9,7 +9,6 @@ import { User } from "lucide-react";
 
 const publicNavigationItems: NavigationItem[] = [
   { href: "/", label: "Home" },
-  { href: "/memberships", label: "Memberships" },
   { href: "/book", label: "Book" },
   { href: "/about-us", label: "About us" },
 ];

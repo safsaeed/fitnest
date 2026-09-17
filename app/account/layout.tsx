@@ -14,7 +14,6 @@ const accountNavigationItems: NavigationItem[] = [
   { href: "/account", label: "Account", exact: true },
   { href: "/account/children", label: "Children" },
   { href: "/account/bookings", label: "Bookings" },
-  { href: "/account/membership", label: "Membership" },
   { href: "/account/profile", label: "Profile" },
 ];
 

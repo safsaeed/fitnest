@@ -1,22 +1,19 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionAvailability } from "@/lib/availability";
 import { BookingForm } from "./booking-form";
 import { ButtonLink } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { SummaryRow } from "@/components/ui/summary-row";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import {
-  formatAgeRange,
-  formatLongDate,
-  formatPrice,
-  formatTime,
-} from "@/lib/formatters";
 import { ArrowLeft } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getParentSession } from "@/lib/parent-auth";
-import { calculateBookingPrice, hasActiveMembership } from "@/lib/pricing";
+import { calculateBookingPrice } from "@/lib/pricing";
+import {
+  calculateAgeAtDate,
+  getStaffingAvailability,
+  getStaffingUnitsForAge,
+} from "@/lib/staffing";
 
 type BookingPageProps = {
   params: Promise<{
@@ -34,21 +31,6 @@ function formatDateInput(date: Date) {
   const day = String(date.getUTCDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
-}
-
-function calculateAgeAtDate(dateOfBirth: Date, sessionDate: Date) {
-  let age = sessionDate.getFullYear() - dateOfBirth.getFullYear();
-
-  const hasHadBirthdayThisYear =
-    sessionDate.getMonth() > dateOfBirth.getMonth() ||
-    (sessionDate.getMonth() === dateOfBirth.getMonth() &&
-      sessionDate.getDate() >= dateOfBirth.getDate());
-
-  if (!hasHadBirthdayThisYear) {
-    age--;
-  }
-
-  return age;
 }
 
 function getSavedChildEligibility({
@@ -111,6 +93,11 @@ export default async function BookingPage({
           },
           select: {
             childCount: true,
+            children: {
+              select: {
+                dateOfBirth: true,
+              },
+            },
           },
         },
       },
@@ -131,7 +118,6 @@ export default async function BookingPage({
                 createdAt: "asc",
               },
             },
-            membership: true,
           },
         })
       : null,
@@ -142,7 +128,24 @@ export default async function BookingPage({
   }
 
   const availability = getSessionAvailability(session);
-  const minAgeYears = session.minAge || 1;
+  const minAgeYears = session.minAge ?? 1;
+  const confirmedChildren = session.bookings.flatMap(
+    (booking) => booking.children,
+  );
+  const staffingAvailability = getStaffingAvailability({
+    children: confirmedChildren,
+    sessionDate: session.startsAt,
+    minAge: minAgeYears,
+    maxAge: session.maxAge,
+  });
+  const staffingLimitReached =
+    staffingAvailability.bookableAgeGroups.length === 0;
+  const canBook = availability.canBook && !staffingLimitReached;
+  const bookingStatusLabel = !availability.canBook
+    ? availability.statusLabel
+    : staffingLimitReached
+      ? "Staffing limit reached"
+      : availability.statusLabel;
 
   const bookingPath = `/book/${venueId}/${sessionId}`;
   const addChildHref = `/account/children/new?returnTo=${encodeURIComponent(
@@ -167,6 +170,9 @@ export default async function BookingPage({
         medicalNotes: child.medicalNotes,
         isEligible: eligibility.isEligible,
         eligibilityReason: eligibility.eligibilityReason,
+        staffingUnits: getStaffingUnitsForAge(
+          calculateAgeAtDate(child.dateOfBirth, session.startsAt),
+        ),
       };
     }) ?? [];
 
@@ -177,19 +183,14 @@ export default async function BookingPage({
           name: parentUser.name,
           email: parentUser.email,
           phone: parentUser.phone,
+          emergencyContactName: parentUser.defaultEmergencyContactName,
+          emergencyContactPhone: parentUser.defaultEmergencyContactPhone,
         };
-
-  const activeMembership = hasActiveMembership(parentUser?.membership ?? null);
 
   const singleChildPriceSummary = calculateBookingPrice({
     session,
-    membership: parentUser?.membership ?? null,
     childCount: 1,
   });
-
-  const hasMemberPrice = session.memberPricePence !== null;
-  const memberPriceWillApply =
-    activeMembership && singleChildPriceSummary.pricingType === "MEMBER";
 
   return (
     <main className="min-h-(--min-page-height)">
@@ -223,70 +224,19 @@ export default async function BookingPage({
           </span>
         </ButtonLink>
 
-        {!availability.canBook ? (
+        {!canBook ? (
           <Alert variant="error" className="mt-6">
             <h2 className="text-lg font-semibold">Booking unavailable</h2>
             <p className="mt-2 text-sm">
               This session is currently unavailable:{" "}
-              <span className="font-semibold">{availability.statusLabel}</span>
-            </p>
-          </Alert>
-        ) : null}
-
-        {hasMemberPrice && !memberPriceWillApply ? (
-          <Alert className="mt-6">
-            <h2 className="text-lg font-semibold">
-              Members pay {formatPrice(session.memberPricePence!)} per child
-            </h2>
-
-            {!parentUser ? (
-              <p className="mt-2 text-sm">
-                Log in or create a parent account with an active membership to
-                get the member price.{" "}
-                <Link href="/account/login" className="font-medium underline">
-                  Log in
-                </Link>{" "}
-                or{" "}
-                <Link
-                  href="/account/register"
-                  className="font-medium underline"
-                >
-                  create an account
-                </Link>
-                .
-              </p>
-            ) : (
-              <p className="mt-2 text-sm">
-                Start or manage your membership to unlock member pricing for
-                this session.{" "}
-                <Link
-                  href="/account/membership"
-                  className="font-medium underline"
-                >
-                  View membership
-                </Link>
-                .
-              </p>
-            )}
-          </Alert>
-        ) : null}
-
-        {memberPriceWillApply ? (
-          <Alert className="mt-6" variant="success">
-            <h2 className="text-md font-semibold">Member price applied</h2>
-            <p className="mt-2 text-sm">
-              Your active membership means you will pay{" "}
-              <span className="font-semibold">
-                {formatPrice(singleChildPriceSummary.unitPricePence)}
-              </span>{" "}
-              per child for this session.
+              <span className="font-semibold">{bookingStatusLabel}</span>
             </p>
           </Alert>
         ) : null}
 
         <div className="mb-2 mt-12 flex flex-col-reverse gap-6 md:flex-row">
           <Card
-            disabled={!availability.canBook}
+            disabled={!canBook}
             className="w-full max-w-none flex-1"
           >
             {query?.error && (
@@ -299,60 +249,15 @@ export default async function BookingPage({
               venueId={venueId}
               sessionId={session.id}
               pricePence={singleChildPriceSummary.unitPricePence}
-              standardPricePence={session.pricePence}
-              memberPricePence={session.memberPricePence}
-              pricingType={singleChildPriceSummary.pricingType}
-              spacesRemaining={availability.spacesRemaining}
+              headcountSpacesRemaining={availability.spacesRemaining}
+              staffingUnitsRemaining={staffingAvailability.remainingUnits}
+              sessionStartsAt={session.startsAt.toISOString()}
               minAgeYears={minAgeYears}
               maxAgeYears={session.maxAge}
               defaultParent={defaultParent}
               savedChildren={savedChildren}
               addChildHref={addChildHref}
             />
-          </Card>
-
-          <Card className="h-fit flex flex-col gap-8 rounded-lg min-w-full max-w-full md:min-w-xs md:max-w-sm md:sticky md:top-24">
-            <h2 className="text-lg font-semibold mb-2">Booking summary</h2>
-
-            <SummaryRow
-              label="Age range"
-              value={`${formatAgeRange(minAgeYears, session.maxAge)} years`}
-            />
-            <SummaryRow label="Venue" value={session.venue.name} />
-            <SummaryRow label="Session" value={session.title} />
-            <SummaryRow label="Date" value={formatLongDate(session.startsAt)} />
-            <SummaryRow
-              label="Time"
-              value={`${formatTime(session.startsAt)} – ${formatTime(
-                session.endsAt,
-              )}`}
-            />
-
-            <SummaryRow
-              label="Standard price"
-              value={`${formatPrice(session.pricePence)} per child`}
-            />
-
-            {session.memberPricePence !== null ? (
-              <SummaryRow
-                label="Member price"
-                value={`${formatPrice(session.memberPricePence)} per child`}
-              />
-            ) : null}
-
-            <SummaryRow
-              label="Price applied"
-              value={`${formatPrice(singleChildPriceSummary.unitPricePence)} per child`}
-            />
-
-            <SummaryRow
-              label="Spaces left"
-              value={`${availability.spacesRemaining} of ${session.capacity}`}
-            />
-
-            <p className="text-(--color-danger) text-xs">
-              Bookings and cancellations close at 6pm the day before the session.
-            </p>
           </Card>
         </div>
       </section>

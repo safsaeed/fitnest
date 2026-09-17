@@ -20,50 +20,6 @@ type AdminParentsPageProps = {
   }>;
 };
 
-function getMembershipBadgeClass(status?: string | null) {
-  if (status === "ACTIVE") {
-    return "border-(--color-success-hover) bg-(--color-success-soft) text-(--color-success)";
-  }
-
-  if (status === "PAST_DUE" || status === "UNPAID") {
-    return "border-(--color-danger-hover) bg-(--color-danger-soft) text-(--color-danger)";
-  }
-
-  if (status === "CANCELLED") {
-    return "border-(--color-brand-border) bg-(--color-brand-soft) text-(--color-text-secondary)";
-  }
-
-  return "border-(--color-warning-hover) bg-(--color-warning-soft) text-(--color-warning)";
-}
-
-function getMembershipLabel(status?: string | null) {
-  if (!status) {
-    return "No membership";
-  }
-
-  if (status === "ACTIVE") {
-    return "Active";
-  }
-
-  if (status === "INCOMPLETE") {
-    return "Incomplete";
-  }
-
-  if (status === "PAST_DUE") {
-    return "Past due";
-  }
-
-  if (status === "UNPAID") {
-    return "Unpaid";
-  }
-
-  if (status === "CANCELLED") {
-    return "Cancelled";
-  }
-
-  return status;
-}
-
 export default async function AdminParentsPage({
   searchParams,
 }: AdminParentsPageProps) {
@@ -96,7 +52,6 @@ export default async function AdminParentsPage({
         }
       : undefined,
     include: {
-      membership: true,
       children: {
         where: {
           isActive: true,
@@ -109,7 +64,6 @@ export default async function AdminParentsPage({
         select: {
           totalAmountPence: true,
           paymentStatus: true,
-          pricingType: true,
         },
       },
     },
@@ -117,10 +71,6 @@ export default async function AdminParentsPage({
       createdAt: "desc",
     },
   });
-
-  const activeMembersCount = parents.filter(
-    (parent) => parent.membership?.status === "ACTIVE",
-  ).length;
 
   const totalPaidRevenuePence = parents.reduce((total, parent) => {
     const parentPaidTotal = parent.bookings
@@ -130,14 +80,6 @@ export default async function AdminParentsPage({
       }, 0);
 
     return total + parentPaidTotal;
-  }, 0);
-
-  const memberPricedBookingCount = parents.reduce((total, parent) => {
-    return (
-      total +
-      parent.bookings.filter((booking) => booking.pricingType === "MEMBER")
-        .length
-    );
   }, 0);
 
   return (
@@ -154,8 +96,7 @@ export default async function AdminParentsPage({
           <h1 className="mt-3 text-3xl font-semibold">Admin | Parents</h1>
 
           <p className="mt-2 text-sm text-(--color-text-secondary)">
-            View parent accounts, memberships, saved children and linked
-            bookings.
+            View parent accounts, saved children and linked bookings.
           </p>
 
           <ButtonLink
@@ -171,29 +112,11 @@ export default async function AdminParentsPage({
           </ButtonLink>
         </div>
 
-        <div className="mb-8 grid gap-4 sm:grid-cols-4">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2">
           <Card className="p-4 sm:p-4">
             <p className="text-sm text-(--color-text-secondary)">Parents</p>
             <p className="text-lg font-semibold text-(--color-brand)">
               {parents.length}
-            </p>
-          </Card>
-
-          <Card className="p-4 sm:p-4">
-            <p className="text-sm text-(--color-text-secondary)">
-              Active members
-            </p>
-            <p className="text-lg font-semibold text-(--color-brand)">
-              {activeMembersCount}
-            </p>
-          </Card>
-
-          <Card className="p-4 sm:p-4">
-            <p className="text-sm text-(--color-text-secondary)">
-              Member-priced bookings
-            </p>
-            <p className="text-lg font-semibold text-(--color-brand)">
-              {memberPricedBookingCount}
             </p>
           </Card>
 
@@ -280,15 +203,6 @@ export default async function AdminParentsPage({
                         </p>
                       </>
                     }
-                    badge={
-                      <span
-                        className={`rounded-lg border px-2 py-1 text-xs font-medium ${getMembershipBadgeClass(
-                          parent.membership?.status,
-                        )}`}
-                      >
-                        {getMembershipLabel(parent.membership?.status)}
-                      </span>
-                    }
                     actions={
                       <LoadingButtonLink
                         href={`/admin/parents/${parent.id}`}
@@ -311,10 +225,6 @@ export default async function AdminParentsPage({
                     <AdminListMetaItem
                       label="Paid booking revenue"
                       value={formatPrice(paidRevenuePence)}
-                    />
-                    <AdminListMetaItem
-                      label="Stripe customer"
-                      value={parent.stripeCustomerId || "—"}
                     />
                   </AdminListMeta>
                 </AdminListCard>

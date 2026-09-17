@@ -8,6 +8,14 @@ import { groupSessionsByType } from "@/lib/session-groups";
 import { getLocalDateKey } from "@/lib/session-dates";
 import { MapPin, ArrowLeft } from "lucide-react";
 import {
+  getBookableStaffingAgeGroups,
+  getStaffingAvailability,
+} from "@/lib/staffing";
+import {
+  formatStaffingAgeRangeLabel,
+  getBookableStaffingAgeRange,
+} from "@/lib/booking-staffing";
+import {
   AvailableSessions,
   type SessionOccurrence,
 } from "./available-sessions";
@@ -46,6 +54,11 @@ export default async function VenueSessionsPage({
             },
             select: {
               childCount: true,
+              children: {
+                select: {
+                  dateOfBirth: true,
+                },
+              },
             },
           },
         },
@@ -62,6 +75,28 @@ export default async function VenueSessionsPage({
   ).map((sessions) =>
     sessions.map((session) => {
       const availability = getSessionAvailability(session);
+      const staffingAvailability = getStaffingAvailability({
+        children: session.bookings.flatMap((booking) => booking.children),
+        sessionDate: session.startsAt,
+        minAge: session.minAge ?? 1,
+        maxAge: session.maxAge,
+      });
+      const staffingLimitReached =
+        staffingAvailability.bookableAgeGroups.length === 0;
+      const sessionAgeGroups = getBookableStaffingAgeGroups({
+        remainingUnits: staffingAvailability.capacityUnits,
+        minAge: session.minAge ?? 1,
+        maxAge: session.maxAge,
+      });
+      const isDynamicallyAgeRestricted =
+        staffingAvailability.bookableAgeGroups.length <
+        sessionAgeGroups.length;
+      const bookableAgeRange = getBookableStaffingAgeRange({
+        groups: staffingAvailability.bookableAgeGroups,
+        minAge: session.minAge ?? 1,
+        maxAge: session.maxAge,
+      });
+      const canBook = availability.canBook && !staffingLimitReached;
 
       return {
         id: session.id,
@@ -75,9 +110,20 @@ export default async function VenueSessionsPage({
         timeLabel: `${formatTime(session.startsAt)} – ${formatTime(
           session.endsAt,
         )}`,
-        spacesRemaining: availability.spacesRemaining,
-        canBook: availability.canBook,
-        availabilityLabel: availability.statusLabel,
+        spacesRemaining: Math.min(
+          availability.spacesRemaining,
+          staffingAvailability.maxAdditionalChildren,
+        ),
+        canBook,
+        availabilityLabel: !availability.canBook
+          ? availability.statusLabel
+          : staffingLimitReached
+            ? "Staffing limit reached"
+            : availability.statusLabel,
+        staffingAgeLabel:
+          isDynamicallyAgeRestricted && bookableAgeRange
+            ? `${formatStaffingAgeRangeLabel(bookableAgeRange.minAge, bookableAgeRange.maxAge)} only`
+            : null,
       };
     }),
   );

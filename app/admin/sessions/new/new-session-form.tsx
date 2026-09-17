@@ -47,15 +47,7 @@ function getErrorMessage(error?: string) {
   }
 
   if (error === "invalid-price") {
-    return "Standard price must be between £0 and £1,000.";
-  }
-
-  if (error === "invalid-member-price") {
-    return "Member price must be between £0 and £1,000.";
-  }
-
-  if (error === "member-price-too-high") {
-    return "Member price cannot be higher than the standard price.";
+    return "Price must be between £0 and £1,000.";
   }
 
   if (error === "invalid-age-range") {
@@ -273,7 +265,7 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
           />
 
           <InputField
-            label="Standard price per child (£)"
+            label="Price per child (£)"
             id="pricePounds"
             name="pricePounds"
             type="number"
@@ -281,17 +273,6 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
             min={0}
             max={1000}
             step="0.01"
-          />
-
-          <InputField
-            label="Member price per child (£)"
-            id="memberPricePounds"
-            name="memberPricePounds"
-            type="number"
-            min={0}
-            max={1000}
-            step="0.01"
-            hint="Optional. Leave blank if this session does not have member pricing."
           />
 
           <InputField

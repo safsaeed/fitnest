@@ -73,17 +73,12 @@ export async function getCurrentParentUser() {
     return null;
   }
 
-  const parentUser = await prisma.parentUser.findFirst({
+  return prisma.parentUser.findFirst({
     where: {
       id: session.parentUserId,
       isActive: true,
     },
-    include: {
-      membership: true,
-    },
   });
-
-  return parentUser;
 }
 
 export async function destroyParentSession() {

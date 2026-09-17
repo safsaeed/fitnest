@@ -2,8 +2,6 @@ import "server-only";
 import { getEmailFromAddress, resend } from "@/lib/email";
 import { formatFullDateTime, formatPrice, formatTime } from "@/lib/formatters";
 
-type BookingPricingType = "STANDARD" | "MEMBER";
-
 type BookingConfirmationEmailInput = {
   to: string;
   parentName: string;
@@ -17,16 +15,13 @@ type BookingConfirmationEmailInput = {
     firstName: string;
     lastName: string | null;
   }[];
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
   totalAmountPence: number;
   unitPricePence?: number;
-  pricingType?: BookingPricingType;
   bookingUrl?: string;
   accountBookingUrl?: string | null;
 };
-
-function getPricingLabel(pricingType?: BookingPricingType) {
-  return pricingType === "MEMBER" ? "Member price" : "Standard price";
-}
 
 export async function sendBookingConfirmationEmail({
   to,
@@ -38,9 +33,10 @@ export async function sendBookingConfirmationEmail({
   startsAt,
   endsAt,
   children,
+  emergencyContactName,
+  emergencyContactPhone,
   totalAmountPence,
   unitPricePence,
-  pricingType,
   bookingUrl,
   accountBookingUrl,
 }: BookingConfirmationEmailInput) {
@@ -49,8 +45,6 @@ export async function sendBookingConfirmationEmail({
     .join(", ");
 
   const subject = `Booking confirmed: ${bookingReference}`;
-  const pricingLabel = getPricingLabel(pricingType);
-
   const bookingLinkHtml = bookingUrl
     ? `<p style="margin: 20px 0;"><a href="${bookingUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">View booking</a></p>`
     : "";
@@ -61,7 +55,17 @@ export async function sendBookingConfirmationEmail({
 
   const pricePerChildHtml =
     typeof unitPricePence === "number"
-      ? `<p style="margin: 0 0 8px;"><strong>Price per child:</strong> ${formatPrice(unitPricePence)} (${pricingLabel})</p>`
+      ? `<p style="margin: 0 0 8px;"><strong>Price per child:</strong> ${formatPrice(unitPricePence)}</p>`
+      : "";
+
+  const emergencyContactHtml =
+    emergencyContactName && emergencyContactPhone
+      ? `<p style="margin: 0 0 8px;"><strong>Emergency contact:</strong> ${emergencyContactName} · ${emergencyContactPhone}</p>`
+      : "";
+
+  const emergencyContactText =
+    emergencyContactName && emergencyContactPhone
+      ? `Emergency contact: ${emergencyContactName} · ${emergencyContactPhone}`
       : "";
 
   const html = `
@@ -79,6 +83,7 @@ export async function sendBookingConfirmationEmail({
         <p style="margin: 0 0 8px;"><strong>Address:</strong> ${venueAddress || "TBC"}</p>
         <p style="margin: 0 0 8px;"><strong>Date/time:</strong> ${formatFullDateTime(startsAt)} - ${formatTime(endsAt)}</p>
         <p style="margin: 0 0 8px;"><strong>Children:</strong> ${childNames}</p>
+        ${emergencyContactHtml}
         ${pricePerChildHtml}
         <p style="margin: 0;"><strong>Total paid:</strong> ${formatPrice(totalAmountPence)}</p>
       </div>
@@ -86,7 +91,7 @@ export async function sendBookingConfirmationEmail({
       ${bookingLinkHtml}
       ${accountLinkHtml}
 
-      <p>Bookings and cancellations close at 6pm the day before the session.</p>
+      <p>Bookings and cancellations are available until the session starts. Cancellations made within 24 hours of the session are non-refundable.</p>
 
       <p>Thanks,<br />Fitnest Studios</p>
     </div>
@@ -105,12 +110,13 @@ Venue: ${venueName}
 Address: ${venueAddress || "TBC"}
 Date/time: ${formatFullDateTime(startsAt)} - ${formatTime(endsAt)}
 Children: ${childNames}
-${typeof unitPricePence === "number" ? `Price per child: ${formatPrice(unitPricePence)} (${pricingLabel})` : ""}
+${emergencyContactText}
+${typeof unitPricePence === "number" ? `Price per child: ${formatPrice(unitPricePence)}` : ""}
 Total paid: ${formatPrice(totalAmountPence)}
 ${bookingUrl ? `\nView booking: ${bookingUrl}` : ""}
 ${accountBookingUrl ? `\nView in your account: ${accountBookingUrl}` : ""}
 
-Bookings and cancellations close at 6pm the day before the session.
+Bookings and cancellations are available until the session starts. Cancellations made within 24 hours of the session are non-refundable.
 
 Thanks,
 Fitnest Studios
@@ -143,6 +149,7 @@ type BookingCancellationEmailInput = {
     lastName: string | null;
   }[];
   totalAmountPence: number;
+  refunded: boolean;
   bookingUrl?: string;
   accountBookingUrl?: string | null;
 };
@@ -156,6 +163,7 @@ export async function sendBookingCancellationEmail({
   startsAt,
   children,
   totalAmountPence,
+  refunded,
   bookingUrl,
   accountBookingUrl,
 }: BookingCancellationEmailInput) {
@@ -173,13 +181,33 @@ export async function sendBookingCancellationEmail({
     ? `<p style="margin: 12px 0 0; font-size: 14px;">You can also view this booking from your parent account: <a href="${accountBookingUrl}">${accountBookingUrl}</a></p>`
     : "";
 
+  const outcomeSummary = refunded
+    ? "Your booking has been cancelled and a refund has been processed."
+    : "Your booking has been cancelled. Because it was cancelled within 24 hours of the session, it is non-refundable.";
+
+  const refundAmountHtml = refunded
+    ? `<p style="margin: 0;"><strong>Refund amount:</strong> ${formatPrice(totalAmountPence)}</p>`
+    : `<p style="margin: 0;"><strong>Refund:</strong> No refund is due</p>`;
+
+  const refundFollowUpHtml = refunded
+    ? "<p>Please allow a few working days for the refund to appear on your original payment method.</p>"
+    : "";
+
+  const refundAmountText = refunded
+    ? `Refund amount: ${formatPrice(totalAmountPence)}`
+    : "Refund: No refund is due";
+
+  const refundFollowUpText = refunded
+    ? "\nPlease allow a few working days for the refund to appear on your original payment method."
+    : "";
+
   const html = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
       <h1 style="font-size: 24px; margin-bottom: 8px;">Booking cancelled</h1>
 
       <p>Hi ${parentName},</p>
 
-      <p>Your booking has been cancelled and a refund has been processed.</p>
+      <p>${outcomeSummary}</p>
 
       <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 20px 0;">
         <p style="margin: 0 0 8px;"><strong>Booking reference:</strong> ${bookingReference}</p>
@@ -187,13 +215,13 @@ export async function sendBookingCancellationEmail({
         <p style="margin: 0 0 8px;"><strong>Venue:</strong> ${venueName}</p>
         <p style="margin: 0 0 8px;"><strong>Date/time:</strong> ${formatFullDateTime(startsAt)}</p>
         <p style="margin: 0 0 8px;"><strong>Children:</strong> ${childNames}</p>
-        <p style="margin: 0;"><strong>Refund amount:</strong> ${formatPrice(totalAmountPence)}</p>
+        ${refundAmountHtml}
       </div>
 
       ${bookingLinkHtml}
       ${accountLinkHtml}
 
-      <p>Please allow a few working days for the refund to appear on your original payment method.</p>
+      ${refundFollowUpHtml}
 
       <p>Thanks,<br />Fitnest Studios</p>
     </div>
@@ -204,18 +232,18 @@ Booking cancelled
 
 Hi ${parentName},
 
-Your booking has been cancelled and a refund has been processed.
+${outcomeSummary}
 
 Booking reference: ${bookingReference}
 Session: ${sessionTitle}
 Venue: ${venueName}
 Date/time: ${formatFullDateTime(startsAt)}
 Children: ${childNames}
-Refund amount: ${formatPrice(totalAmountPence)}
+${refundAmountText}
 ${bookingUrl ? `\nView booking: ${bookingUrl}` : ""}
 ${accountBookingUrl ? `\nView in your account: ${accountBookingUrl}` : ""}
 
-Please allow a few working days for the refund to appear on your original payment method.
+${refundFollowUpText}
 
 Thanks,
 Fitnest Studios

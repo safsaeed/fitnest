@@ -5,21 +5,11 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getParentSession } from "@/lib/parent-auth";
 import { getFormString } from "@/lib/form-data";
-
-function validatePhone(phone: string) {
-  if (!phone) {
-    return true;
-  }
-
-  const digits = phone.replace(/\D/g, "");
-
-  return (
-    phone.length <= 20 &&
-    digits.length >= 10 &&
-    digits.length <= 15 &&
-    /^\+?[0-9() -]+$/.test(phone)
-  );
-}
+import {
+  emergencyContactNameSchema,
+  emergencyContactPhoneSchema,
+  phoneSchema,
+} from "@/lib/validation/contact";
 
 export async function updateParentProfile(formData: FormData): Promise<void> {
   const session = await getParentSession();
@@ -43,17 +33,22 @@ export async function updateParentProfile(formData: FormData): Promise<void> {
     redirect("/account/profile?error=invalid-name");
   }
 
-  if (!validatePhone(phone)) {
+  if (phone && !phoneSchema.safeParse(phone).success) {
     redirect("/account/profile?error=invalid-phone");
   }
 
-  if (defaultEmergencyContactName && defaultEmergencyContactName.length > 100) {
+  if (!defaultEmergencyContactName || !defaultEmergencyContactPhone) {
+    redirect("/account/profile?error=missing-emergency-contact");
+  }
+
+  if (
+    !emergencyContactNameSchema.safeParse(defaultEmergencyContactName).success
+  ) {
     redirect("/account/profile?error=invalid-emergency-name");
   }
 
   if (
-    defaultEmergencyContactPhone &&
-    !validatePhone(defaultEmergencyContactPhone)
+    !emergencyContactPhoneSchema.safeParse(defaultEmergencyContactPhone).success
   ) {
     redirect("/account/profile?error=invalid-emergency-phone");
   }
@@ -65,8 +60,8 @@ export async function updateParentProfile(formData: FormData): Promise<void> {
     data: {
       name,
       phone: phone || null,
-      defaultEmergencyContactName: defaultEmergencyContactName || null,
-      defaultEmergencyContactPhone: defaultEmergencyContactPhone || null,
+      defaultEmergencyContactName,
+      defaultEmergencyContactPhone,
     },
   });
 
