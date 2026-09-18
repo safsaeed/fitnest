@@ -11,6 +11,7 @@ import { getFormString } from "@/lib/form-data";
 import { getParentSession } from "@/lib/parent-auth";
 import { calculateBookingPrice } from "@/lib/pricing";
 import { calculateAgeAtDate } from "@/lib/staffing";
+import { getSessionMinimumAge } from "@/lib/session-age";
 
 function redirectWithError({
   request,
@@ -48,7 +49,7 @@ function childMeetsSessionAgeRequirement({
   maxAge: number | null;
 }) {
   const age = calculateAgeAtDate(dateOfBirth, sessionDate);
-  const minimumAge = minAge ?? 1;
+  const minimumAge = getSessionMinimumAge(minAge);
 
   if (age < minimumAge) {
     return false;

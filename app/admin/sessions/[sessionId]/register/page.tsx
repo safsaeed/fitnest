@@ -5,6 +5,7 @@ import {
   calculateStaffingSummary,
   getStaffingAvailability,
 } from "@/lib/staffing";
+import { getSessionMinimumAge } from "@/lib/session-age";
 import {
   formatStaffingAgeRangeLabel,
   getBookableStaffingAgeRange,
@@ -58,6 +59,7 @@ export default async function SessionRegisterPage({
   }
 
   const children = session.bookings.flatMap((booking) => booking.children);
+  const minAge = getSessionMinimumAge(session.minAge);
 
   const staffing = calculateStaffingSummary({
     children,
@@ -66,7 +68,7 @@ export default async function SessionRegisterPage({
   const staffingAvailability = getStaffingAvailability({
     children,
     sessionDate: session.startsAt,
-    minAge: session.minAge ?? 1,
+    minAge,
     maxAge: session.maxAge,
   });
 
@@ -78,7 +80,7 @@ export default async function SessionRegisterPage({
   );
   const bookableAgeRange = getBookableStaffingAgeRange({
     groups: staffingAvailability.bookableAgeGroups,
-    minAge: session.minAge ?? 1,
+    minAge,
     maxAge: session.maxAge,
   });
 

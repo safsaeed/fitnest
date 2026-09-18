@@ -14,6 +14,7 @@ import {
   getStaffingAvailability,
   getStaffingUnitsForAge,
 } from "@/lib/staffing";
+import { getSessionMinimumAge } from "@/lib/session-age";
 
 type BookingPageProps = {
   params: Promise<{
@@ -128,7 +129,7 @@ export default async function BookingPage({
   }
 
   const availability = getSessionAvailability(session);
-  const minAgeYears = session.minAge ?? 1;
+  const minAgeYears = getSessionMinimumAge(session.minAge);
   const confirmedChildren = session.bookings.flatMap(
     (booking) => booking.children,
   );
