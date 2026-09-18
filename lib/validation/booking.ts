@@ -1,12 +1,10 @@
 import { z } from "zod";
-import { emailSchema, phoneSchema, requiredString, yearsAgo } from "./common";
+import { emailSchema, phoneSchema, requiredString } from "./common";
 
 export const childSchema = z.object({
   firstName: requiredString("Child first name").max(50, "First name is too long"),
   lastName: requiredString("Child last name").max(50, "Last name is too long"),
-  dateOfBirth: z.coerce.date().max(yearsAgo(1), {
-    message: "Child must be at least 1 year old",
-  }),
+  dateOfBirth: z.coerce.date(),
 });
 
 export const bookingSchema = z.object({
