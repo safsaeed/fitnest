@@ -5,6 +5,7 @@ import { InputField } from "@/components/ui/form-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { formatTimeInputValue } from "@/lib/date-time";
 import { formatLongDate } from "@/lib/formatters";
+import { DEFAULT_SESSION_MIN_AGE } from "@/lib/session-age";
 import { getRepeatPatternLabel } from "@/lib/session-series";
 import type { Session, SessionSeries, Venue } from "@prisma/client";
 
@@ -215,6 +216,7 @@ export function SessionSeriesForm({
           />
 
           <InputField
+            hint="Defaults to age 0 (from birth)."
             label="Min age"
             id="minAge"
             name="minAge"
@@ -222,7 +224,9 @@ export function SessionSeriesForm({
             min={0}
             max={18}
             step={1}
-            defaultValue={exampleSession.minAge ?? ""}
+            defaultValue={
+              exampleSession.minAge ?? DEFAULT_SESSION_MIN_AGE
+            }
           />
 
           <InputField

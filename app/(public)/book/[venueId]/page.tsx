@@ -11,6 +11,7 @@ import {
   getBookableStaffingAgeGroups,
   getStaffingAvailability,
 } from "@/lib/staffing";
+import { getSessionMinimumAge } from "@/lib/session-age";
 import {
   formatStaffingAgeRangeLabel,
   getBookableStaffingAgeRange,
@@ -75,17 +76,18 @@ export default async function VenueSessionsPage({
   ).map((sessions) =>
     sessions.map((session) => {
       const availability = getSessionAvailability(session);
+      const minAge = getSessionMinimumAge(session.minAge);
       const staffingAvailability = getStaffingAvailability({
         children: session.bookings.flatMap((booking) => booking.children),
         sessionDate: session.startsAt,
-        minAge: session.minAge ?? 1,
+        minAge,
         maxAge: session.maxAge,
       });
       const staffingLimitReached =
         staffingAvailability.bookableAgeGroups.length === 0;
       const sessionAgeGroups = getBookableStaffingAgeGroups({
         remainingUnits: staffingAvailability.capacityUnits,
-        minAge: session.minAge ?? 1,
+        minAge,
         maxAge: session.maxAge,
       });
       const isDynamicallyAgeRestricted =
@@ -93,7 +95,7 @@ export default async function VenueSessionsPage({
         sessionAgeGroups.length;
       const bookableAgeRange = getBookableStaffingAgeRange({
         groups: staffingAvailability.bookableAgeGroups,
-        minAge: session.minAge ?? 1,
+        minAge,
         maxAge: session.maxAge,
       });
       const canBook = availability.canBook && !staffingLimitReached;
@@ -103,7 +105,7 @@ export default async function VenueSessionsPage({
         title: session.title,
         description: session.description,
         priceLabel: formatPrice(session.pricePence),
-        minAge: session.minAge,
+        minAge,
         maxAge: session.maxAge,
         dateKey: getLocalDateKey(session.startsAt),
         dateLabel: formatLongDate(session.startsAt),

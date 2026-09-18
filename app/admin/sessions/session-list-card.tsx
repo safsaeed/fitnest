@@ -16,6 +16,7 @@ import {
   formatPrice,
 } from "@/lib/formatters";
 import { getRepeatPatternLabel } from "@/lib/session-series";
+import { getSessionMinimumAge } from "@/lib/session-age";
 import {
   activateSession,
   deactivateSession,
@@ -178,7 +179,7 @@ export function SessionOccurrenceCard({
         />
         <AdminListMetaItem
           label="Ages"
-          value={`${session.minAge !== null ? session.minAge : "—"}–${
+          value={`${getSessionMinimumAge(session.minAge)}–${
             session.maxAge !== null ? session.maxAge : "—"
           }`}
         />

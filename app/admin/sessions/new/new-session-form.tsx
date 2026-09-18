@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/form-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { formatDateInputValue } from "@/lib/date-time";
+import { DEFAULT_SESSION_MIN_AGE } from "@/lib/session-age";
 import { WEEKDAYS } from "@/lib/session-series";
 import type { Venue } from "@prisma/client";
 import { Info } from "lucide-react";
@@ -276,12 +277,12 @@ export function NewSessionForm({ venues, action, error }: NewSessionFormProps) {
           />
 
           <InputField
-            hint="Leave blank to use the default minimum age of 1."
+            hint="Defaults to age 0 (from birth)."
             label="Min age"
             id="minAge"
             name="minAge"
             type="number"
-            defaultValue={1}
+            defaultValue={DEFAULT_SESSION_MIN_AGE}
             min={0}
             max={18}
             step={1}

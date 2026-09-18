@@ -1,3 +1,5 @@
+import { DEFAULT_SESSION_MIN_AGE } from "./session-age";
+
 export type ChildForStaffing = {
   dateOfBirth: Date | null;
 };
@@ -135,7 +137,7 @@ function ageGroupOverlapsSessionRange(
 
 export function getBookableStaffingAgeGroups({
   remainingUnits,
-  minAge = 1,
+  minAge = DEFAULT_SESSION_MIN_AGE,
   maxAge = null,
 }: {
   remainingUnits: number;
@@ -152,7 +154,7 @@ export function getBookableStaffingAgeGroups({
 export function getStaffingAvailability({
   children,
   sessionDate,
-  minAge = 1,
+  minAge = DEFAULT_SESSION_MIN_AGE,
   maxAge = null,
   staffCount = STAFF_PER_SESSION,
 }: {
