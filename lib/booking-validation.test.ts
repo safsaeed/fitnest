@@ -51,6 +51,16 @@ test("requires and returns emergency contact details for a booking", () => {
   assert.equal(input.emergencyContactPhone, "07987 654321");
 });
 
+test("does not impose a global minimum age on guest bookings", () => {
+  const formData = createValidGuestBookingForm();
+  const infantDateOfBirth = new Date().toISOString().slice(0, 10);
+  formData.set("children[0][dateOfBirth]", infantDateOfBirth);
+
+  const input = parseBookingFormData(formData);
+
+  assert.equal(input.children[0]?.dateOfBirth, infantDateOfBirth);
+});
+
 test("rejects a booking without an emergency contact name", () => {
   const formData = createValidGuestBookingForm();
   formData.delete("emergencyContactName");

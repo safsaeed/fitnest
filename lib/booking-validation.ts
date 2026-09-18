@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { yearsAgo } from "@/lib/date-time";
 import { getFormString, getOptionalFormString } from "@/lib/form-data";
 import {
   emergencyContactNameSchema,
@@ -54,21 +53,7 @@ const childSchema = z.object({
     })
     .refine((value) => parseDateOnly(value) !== null, {
       message: "Enter a valid child date of birth.",
-    })
-    .refine(
-      (value) => {
-        const date = parseDateOnly(value);
-
-        if (!date) {
-          return false;
-        }
-
-        return date <= yearsAgo(1);
-      },
-      {
-        message: "Children must be at least 1 year old.",
-      },
-    ),
+    }),
 
   allergies: requiredText({
     field: "Allergies",
