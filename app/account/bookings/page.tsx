@@ -5,22 +5,10 @@ import { formatDateTime, formatPrice } from "@/lib/formatters";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-
-function getStatusClass(status: string) {
-  if (status === "CONFIRMED") {
-    return "border-green-200 bg-green-50 text-green-800";
-  }
-
-  if (status === "PENDING") {
-    return "border-amber-200 bg-amber-50 text-amber-800";
-  }
-
-  if (status === "CANCELLED" || status === "REFUNDED") {
-    return "border-red-200 bg-red-50 text-red-800";
-  }
-
-  return "border-gray-200 bg-gray-50 text-gray-800";
-}
+import {
+  getBookingPaymentBadgeClass,
+  getBookingPaymentDisplay,
+} from "@/lib/booking-payment";
 
 export default async function AccountBookingsPage() {
   const session = await getParentSession();
@@ -71,8 +59,10 @@ export default async function AccountBookingsPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {bookings.map((booking) => (
-            <Card key={booking.id} className="p-5">
+          {bookings.map((booking) => {
+            const display = getBookingPaymentDisplay(booking);
+
+            return <Card key={booking.id} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-sm text-(--color-text-muted)">
@@ -93,11 +83,9 @@ export default async function AccountBookingsPage() {
                 </div>
 
                 <span
-                  className={`rounded-md border px-2 py-1 text-xs font-medium uppercase tracking-wide ${getStatusClass(
-                    booking.status,
-                  )}`}
+                  className={`rounded-md border px-2 py-1 text-xs font-medium uppercase tracking-wide ${getBookingPaymentBadgeClass(display.tone)}`}
                 >
-                  {booking.status}
+                  {display.label}
                 </span>
               </div>
 
@@ -112,7 +100,11 @@ export default async function AccountBookingsPage() {
                 <div>
                   <p className="text-(--color-text-muted)">Payment</p>
                   <p className="font-medium text-(--color-text-primary)">
-                    {booking.paymentStatus}
+                    {booking.paymentStatus === "PAID"
+                      ? "Paid"
+                      : booking.paymentStatus === "REFUNDED"
+                        ? "Refunded"
+                        : "Not paid"}
                   </p>
                 </div>
 
@@ -138,8 +130,8 @@ export default async function AccountBookingsPage() {
                   Public booking link
                 </ButtonLink>
               </div>
-            </Card>
-          ))}
+            </Card>;
+          })}
         </div>
       )}
     </div>

@@ -1,10 +1,16 @@
 import { Card } from "@/components/ui/card";
 import { LoadingButtonLink } from "@/components/ui/loading-button-link";
 import { prisma } from "@/lib/prisma";
+import {
+  getBookingPaymentBadgeClass,
+  getBookingPaymentDisplay,
+} from "@/lib/booking-payment";
 
 type PaymentCancelledPageProps = {
   searchParams?: Promise<{
     booking?: string;
+    token?: string;
+    outcome?: string;
   }>;
 };
 
@@ -13,11 +19,13 @@ export default async function PaymentCancelledPage({
 }: PaymentCancelledPageProps) {
   const params = await searchParams;
   const bookingReference = params?.booking;
+  const token = params?.token;
 
-  const booking = bookingReference
-    ? await prisma.booking.findUnique({
+  const booking = bookingReference && token
+    ? await prisma.booking.findFirst({
         where: {
           bookingReference,
+          bookingAccessToken: token,
         },
         include: {
           session: {
@@ -29,20 +37,32 @@ export default async function PaymentCancelledPage({
       })
     : null;
 
+  const display = booking ? getBookingPaymentDisplay(booking) : null;
+  const couldNotClose = params?.outcome === "error";
+
   return (
     <main className="min-h-(--min-page-height) flex items-center justify-center p-4">
       <Card className="max-w-md">
-        <p className="text-sm font-medium uppercase tracking-wide text-(--color-danger) rounded-lg bg-(--color-danger-soft) px-3 py-1 w-fit">
-          Payment cancelled
+        <p
+          className={`w-fit rounded-lg border px-3 py-1 text-sm font-medium uppercase tracking-wide ${
+            display
+              ? getBookingPaymentBadgeClass(display.tone)
+              : "border-(--color-danger-border) bg-(--color-danger-soft) text-(--color-danger)"
+          }`}
+        >
+          {display?.label ?? "Payment not completed"}
         </p>
 
         <h1 className="mt-4 text-3xl font-semibold text-gray-900">
-          Your booking has not been confirmed
+          {couldNotClose
+            ? "Your payment is still awaiting completion"
+            : "Your booking has not been confirmed"}
         </h1>
 
         <p className="mt-4 text-(--color-text-secondary)">
-          Payment was cancelled or not completed. No confirmed booking has been
-          made.
+          {couldNotClose
+            ? "We could not close the payment session immediately. It will expire automatically, and no booking is confirmed unless payment succeeds."
+            : "Payment was cancelled or not completed. The incomplete booking has been closed and you have not been charged."}
         </p>
 
         {booking && (
@@ -63,18 +83,25 @@ export default async function PaymentCancelledPage({
             </p>
             <p className="mt-2">
               <span className="text-(--color-text-secondary)">Status:</span>{" "}
-              {booking.status}
+              {display?.label}
             </p>
           </div>
         )}
 
         <div className="mt-6 flex justify-center gap-4 flex-col sm:flex-row">
-          {booking ? (
+          {booking && couldNotClose && token ? (
+            <LoadingButtonLink
+              className="w-full sm:w-1/2"
+              href={`/booking/${booking.bookingReference}?token=${token}`}
+            >
+              Continue payment
+            </LoadingButtonLink>
+          ) : booking ? (
             <LoadingButtonLink
               className="w-full sm:w-1/2"
               href={`/book/${booking.session.venueId}/${booking.sessionId}`}
             >
-              Try payment again
+              Start a new booking
             </LoadingButtonLink>
           ) : (
             <LoadingButtonLink href="/" className="w-full sm:w-1/2">

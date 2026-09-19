@@ -5,6 +5,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Alert } from "@/components/ui/alert";
+import { getBookingPaymentDisplay } from "@/lib/booking-payment";
 
 function formatDateTime(date: Date) {
   return new Intl.DateTimeFormat("en-GB", {
@@ -146,8 +147,10 @@ export default async function AccountDashboardPage() {
           </p>
         ) : (
           <div className="mt-4 space-y-3">
-            {parentUser.bookings.map((booking) => (
-              <div
+            {parentUser.bookings.map((booking) => {
+              const display = getBookingPaymentDisplay(booking);
+
+              return <div
                 key={booking.id}
                 className="rounded-lg border border-(--color-brand-border) bg-(--color-brand-soft) p-4 text-sm"
               >
@@ -169,12 +172,12 @@ export default async function AccountDashboardPage() {
                       {booking.bookingReference}
                     </p>
                     <p className="mt-1 text-(--color-text-secondary)">
-                      {booking.status} / {booking.paymentStatus}
+                      {display.label}
                     </p>
                   </div>
                 </div>
-              </div>
-            ))}
+              </div>;
+            })}
           </div>
         )}
       </Card>

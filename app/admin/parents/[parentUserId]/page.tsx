@@ -5,24 +5,16 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import { formatDate, formatDateTime, formatPrice } from "@/lib/formatters";
+import {
+  getBookingPaymentBadgeClass,
+  getBookingPaymentDisplay,
+} from "@/lib/booking-payment";
 
 type AdminParentDetailPageProps = {
   params: Promise<{
     parentUserId: string;
   }>;
 };
-
-function getBookingBadgeClass(status: string) {
-  if (status === "CONFIRMED") {
-    return "border-(--color-success-hover) bg-(--color-success-soft) text-(--color-success)";
-  }
-
-  if (status === "PENDING") {
-    return "border-(--color-warning-hover) bg-(--color-warning-soft) text-(--color-warning)";
-  }
-
-  return "border-(--color-danger-hover) bg-(--color-danger-soft) text-(--color-danger)";
-}
 
 function DetailRow({
   label,
@@ -193,8 +185,10 @@ export default async function AdminParentDetailPage({
                   No account-linked bookings.
                 </p>
               ) : (
-                parent.bookings.map((booking) => (
-                  <div
+                parent.bookings.map((booking) => {
+                  const display = getBookingPaymentDisplay(booking);
+
+                  return <div
                     key={booking.id}
                     className="rounded-lg border border-(--color-brand-border) bg-(--color-brand-soft) p-4"
                   >
@@ -218,11 +212,9 @@ export default async function AdminParentDetailPage({
                       </div>
 
                       <span
-                        className={`rounded-lg border px-2 py-1 text-xs font-medium ${getBookingBadgeClass(
-                          booking.status,
-                        )}`}
+                        className={`rounded-lg border px-2 py-1 text-xs font-medium ${getBookingPaymentBadgeClass(display.tone)}`}
                       >
-                        {booking.status}
+                        {display.label}
                       </span>
                     </div>
 
@@ -244,7 +236,11 @@ export default async function AdminParentDetailPage({
 
                       <p>
                         <span className="text-(--color-text-muted)">Payment:</span>{" "}
-                        {booking.paymentStatus}
+                        {booking.paymentStatus === "PAID"
+                          ? "Paid"
+                          : booking.paymentStatus === "REFUNDED"
+                            ? "Refunded"
+                            : "Not paid"}
                       </p>
 
                       <p>
@@ -262,8 +258,8 @@ export default async function AdminParentDetailPage({
                         View booking
                       </ButtonLink>
                     </div>
-                  </div>
-                ))
+                  </div>;
+                })
               )}
             </div>
           </Card>

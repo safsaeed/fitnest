@@ -5,6 +5,7 @@ import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Card } from "@/components/ui/card";
 import { formatDateTime, formatPrice } from "@/lib/formatters";
 import { getBookedChildrenCount } from "@/lib/availability";
+import { getBookingPaymentDisplay } from "@/lib/booking-payment";
 
 export default async function AdminDashboardPage() {
   const now = new Date();
@@ -13,6 +14,7 @@ export default async function AdminDashboardPage() {
     activeVenueCount,
     upcomingSessionCount,
     confirmedBookingCount,
+    pendingPaymentCount,
     upcomingSessions,
     recentBookings,
   ] = await Promise.all([
@@ -34,6 +36,12 @@ export default async function AdminDashboardPage() {
     prisma.booking.count({
       where: {
         status: "CONFIRMED",
+      },
+    }),
+
+    prisma.booking.count({
+      where: {
+        status: "PENDING",
       },
     }),
 
@@ -122,6 +130,20 @@ export default async function AdminDashboardPage() {
                 </p>
               </Card>
             </Link>
+
+            <Link
+              href="/admin/bookings?status=pending"
+              className="hidden sm:block"
+            >
+              <Card className="max-w-1/5 min-w-40 sm:py-4 sm:px-4">
+                <p className="text-sm text-(--color-text-secondary)">
+                  Awaiting payment
+                </p>
+                <p className="text-lg font-semibold text-(--color-warning)">
+                  {pendingPaymentCount}
+                </p>
+              </Card>
+            </Link>
           </div>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -188,8 +210,10 @@ export default async function AdminDashboardPage() {
                   No bookings yet.
                 </p>
               ) : (
-                recentBookings.map((booking) => (
-                  <Link
+                recentBookings.map((booking) => {
+                  const display = getBookingPaymentDisplay(booking);
+
+                  return <Link
                     key={booking.id}
                     href={`/admin/bookings/${booking.id}`}
                     className="flex justify-between gap-6 p-2 sm:p-4 border border-gray-100 bg-gray-50 rounded-lg hover:bg-gray-100 duration-150 items-center mb-4 last:mb-0"
@@ -208,14 +232,12 @@ export default async function AdminDashboardPage() {
                       <p className="text-sm font-medium text-(--color-brand)">
                         {formatPrice(booking.totalAmountPence)}
                       </p>
-                      <p
-                        className={`text-xs text-${booking.status === "CONFIRMED" ? "(--color-success)" : booking.status === "PENDING" ? "(--color-warning)" : "(--color-danger)"}`}
-                      >
-                        {booking.status}
+                      <p className="text-xs text-(--color-text-secondary)">
+                        {display.label}
                       </p>
                     </div>
-                  </Link>
-                ))
+                  </Link>;
+                })
               )}
             </Card>
           </div>
