@@ -9,24 +9,17 @@ import { SummaryRow } from "@/components/ui/summary-row";
 import { formatDate, formatDateTime, formatPrice } from "@/lib/formatters";
 import { getCancellationStatus } from "@/lib/cancellation";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
+import {
+  getBookingPaymentBadgeClass,
+  getBookingPaymentDisplay,
+} from "@/lib/booking-payment";
+import { closePendingBooking } from "../actions";
 
 type BookingDetailPageProps = {
   params: Promise<{
     bookingId: string;
   }>;
 };
-
-function getStatusBadgeClass(status: string) {
-  if (status === "CONFIRMED") {
-    return "bg-(--color-success-soft) text-(--color-success)";
-  }
-
-  if (status === "PENDING") {
-    return "bg-(--color-warning-soft) text-(--color-warning)";
-  }
-
-  return "bg-(--color-danger-soft) text-(--color-danger)";
-}
 
 function getBookingSourceLabel(parentUserId: string | null) {
   return parentUserId ? "Account booking" : "Guest booking";
@@ -77,6 +70,7 @@ export default async function BookingDetailPage({
   }
 
   const cancellation = getCancellationStatus(booking.session.startsAt);
+  const paymentDisplay = getBookingPaymentDisplay(booking);
 
   const canCancel =
     booking.status === "CONFIRMED" &&
@@ -113,11 +107,9 @@ export default async function BookingDetailPage({
 
           <div className="flex flex-wrap gap-2">
             <span
-              className={`rounded-md px-2 py-1 text-sm ${getStatusBadgeClass(
-                booking.status,
-              )}`}
+              className={`rounded-md border px-2 py-1 text-sm ${getBookingPaymentBadgeClass(paymentDisplay.tone)}`}
             >
-              {booking.status}
+              {paymentDisplay.label}
             </span>
 
             <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-sm text-gray-700">
@@ -216,8 +208,17 @@ export default async function BookingDetailPage({
               label="Total amount"
               value={formatPrice(booking.totalAmountPence)}
             />
-            <SummaryRow label="Booking status" value={booking.status} />
-            <SummaryRow label="Payment status" value={booking.paymentStatus} />
+            <SummaryRow label="Status" value={paymentDisplay.label} />
+            <SummaryRow
+              label="Payment"
+              value={
+                booking.paymentStatus === "PAID"
+                  ? "Paid"
+                  : booking.paymentStatus === "REFUNDED"
+                    ? "Refunded"
+                    : "Not paid"
+              }
+            />
             <SummaryRow label="Refund status" value={booking.refundStatus} />
           </Card>
 
@@ -329,11 +330,15 @@ export default async function BookingDetailPage({
         </Card>
 
         <Card className="mt-4">
-          <h2 className="mb-4 text-lg font-semibold">Cancellation / refund</h2>
+          <h2 className="mb-4 text-lg font-semibold">Booking actions</h2>
 
           <SummaryRow
             label="Cancellation status"
-            value={cancellation.message}
+            value={
+              booking.status === "CONFIRMED"
+                ? cancellation.message
+                : "Not applicable to an unconfirmed booking."
+            }
           />
           <SummaryRow
             label="Cancelled at"
@@ -353,7 +358,18 @@ export default async function BookingDetailPage({
           />
 
           <div className="mt-4">
-            {canCancel ? (
+            {booking.status === "PENDING" &&
+            booking.paymentStatus !== "PAID" ? (
+              <ConfirmActionDialog
+                action={closePendingBooking.bind(null, booking.id)}
+                title="Close this incomplete payment?"
+                description="This expires the Stripe checkout and moves the booking out of awaiting payment. No refund is needed because no payment was taken."
+                confirmLabel="Close incomplete payment"
+                cancelLabel="Keep waiting"
+              >
+                Close incomplete payment
+              </ConfirmActionDialog>
+            ) : canCancel ? (
               <ConfirmActionDialog
                 formAction="/api/bookings/cancel"
                 formMethod="POST"
@@ -388,11 +404,11 @@ export default async function BookingDetailPage({
                   ? "Cancel booking and refund"
                   : "Cancel booking"}
               </ConfirmActionDialog>
-            ) : (
+            ) : booking.status === "CONFIRMED" ? (
               <p className="text-sm text-(--color-text-secondary)">
                 This booking can no longer be cancelled online.
               </p>
-            )}
+            ) : null}
           </div>
         </Card>
       </section>

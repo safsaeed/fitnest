@@ -8,6 +8,12 @@ import { Alert } from "@/components/ui/alert";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { LoadingForm } from "@/components/ui/loading-form";
+import { ApiSubmitButton } from "@/components/ui/api-submit-button";
+import {
+  getBookingPaymentBadgeClass,
+  getBookingPaymentDisplay,
+} from "@/lib/booking-payment";
 
 type AccountBookingDetailPageProps = {
   params: Promise<{
@@ -15,50 +21,9 @@ type AccountBookingDetailPageProps = {
   }>;
   searchParams?: Promise<{
     cancel?: string;
+    payment?: string;
   }>;
 };
-
-function getStatusMessage(status: string, paymentStatus: string) {
-  if (status === "CONFIRMED" && paymentStatus === "PAID") {
-    return {
-      title: "Booking confirmed",
-      message:
-        "Your booking is confirmed. Please keep this reference for your records.",
-      badgeClass: "border-green-200 bg-green-50 text-green-800",
-    };
-  }
-
-  if (status === "PENDING") {
-    return {
-      title: "Booking pending",
-      message:
-        "Your booking is pending while payment confirmation is processed. Please refresh this page shortly.",
-      badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
-    };
-  }
-
-  if (status === "REFUNDED" || paymentStatus === "REFUNDED") {
-    return {
-      title: "Booking cancelled",
-      message: "This booking has been cancelled and refunded.",
-      badgeClass: "border-red-200 bg-red-50 text-red-800",
-    };
-  }
-
-  if (status === "CANCELLED") {
-    return {
-      title: "Booking cancelled",
-      message: "This booking has been cancelled without a refund.",
-      badgeClass: "border-red-200 bg-red-50 text-red-800",
-    };
-  }
-
-  return {
-    title: "Booking status",
-    message: "Please contact the team if you need help with this booking.",
-    badgeClass: "border-gray-200 bg-gray-50 text-gray-800",
-  };
-}
 
 function buildVenueAddress(booking: {
   session: {
@@ -131,7 +96,7 @@ export default async function AccountBookingDetailPage({
     notFound();
   }
 
-  const status = getStatusMessage(booking.status, booking.paymentStatus);
+  const status = getBookingPaymentDisplay(booking);
   const cancellation = getCancellationStatus(booking.session.startsAt);
 
   const canShowCancelButton =
@@ -154,9 +119,9 @@ export default async function AccountBookingDetailPage({
         <PageHeader title={status.title} description={status.message} />
 
         <p
-          className={`mt-4 w-fit rounded-md border px-3 py-1 text-xs font-medium uppercase tracking-wide ${status.badgeClass}`}
+          className={`mt-4 w-fit rounded-md border px-3 py-1 text-xs font-medium uppercase tracking-wide ${getBookingPaymentBadgeClass(status.tone)}`}
         >
-          {booking.status}
+          {status.label}
         </p>
 
       </div>
@@ -171,6 +136,33 @@ export default async function AccountBookingDetailPage({
               ? "Your booking has been cancelled. As the cancellation was made within 24 hours of the session, no refund has been issued."
               : "This booking could not be cancelled. Please contact the team if you need help."}
         </Alert>
+      ) : null}
+
+      {query?.payment === "expired" || query?.payment === "error" ? (
+        <Alert variant="error">
+          {query.payment === "expired"
+            ? "That payment window has expired. Please start a new booking if you would still like a place."
+            : "We could not reopen payment. Please try again or contact the team if the problem continues."}
+        </Alert>
+      ) : null}
+
+      {booking.status === "PENDING" &&
+      booking.paymentStatus === "PENDING" ? (
+        <Card className="border-(--color-warning-border) bg-(--color-warning-soft)">
+          <h2 className="text-lg font-semibold">Payment required</h2>
+          <p className="mt-2 text-sm text-(--color-text-secondary)">
+            This place is not reserved until payment is complete. Continue the
+            existing checkout before it expires.
+          </p>
+          <LoadingForm action="/api/bookings/payment" method="POST" className="mt-4">
+            <input
+              type="hidden"
+              name="bookingReference"
+              value={booking.bookingReference}
+            />
+            <ApiSubmitButton>Continue to payment</ApiSubmitButton>
+          </LoadingForm>
+        </Card>
       ) : null}
 
       <Card>
@@ -207,7 +199,7 @@ export default async function AccountBookingDetailPage({
 
           <div className="mt-4">
             <DetailRow
-              label="Total paid"
+              label={booking.paymentStatus === "PAID" ? "Total paid" : "Total"}
               value={formatPrice(booking.totalAmountPence)}
             />
             <DetailRow
@@ -215,8 +207,7 @@ export default async function AccountBookingDetailPage({
               value={formatPrice(booking.unitPricePence)}
             />
             <DetailRow label="Children booked" value={booking.childCount} />
-            <DetailRow label="Booking status" value={booking.status} />
-            <DetailRow label="Payment status" value={booking.paymentStatus} />
+            <DetailRow label="Status" value={status.label} />
             <DetailRow label="Refund status" value={booking.refundStatus} />
           </div>
         </Card>

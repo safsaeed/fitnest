@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export type StatusViewValue = "active" | "inactive" | "all";
+export type StatusViewValue = string;
 
 type StatusViewNavItem = {
   value: StatusViewValue;

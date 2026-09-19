@@ -12,6 +12,11 @@ import { getParentSession } from "@/lib/parent-auth";
 import { calculateBookingPrice } from "@/lib/pricing";
 import { calculateAgeAtDate } from "@/lib/staffing";
 import { getSessionMinimumAge } from "@/lib/session-age";
+import {
+  CHECKOUT_EXPIRY_SECONDS,
+  PAYMENT_START_FAILED_REASON,
+} from "@/lib/booking-payment";
+import { markPendingBookingClosed } from "@/lib/booking-payment.server";
 
 function redirectWithError({
   request,
@@ -336,60 +341,92 @@ export async function POST(request: Request) {
     },
   });
 
-  const checkoutSession = await stripe.checkout.sessions.create({
-    mode: "payment",
-    payment_method_types: ["card"],
-    customer_email: booking.parentEmail,
+  let checkoutSessionId: string | null = null;
 
-    line_items: [
-      {
-        quantity: booking.childCount,
-        price_data: {
-          currency: "gbp",
-          unit_amount: booking.unitPricePence,
-          product_data: {
-            name: session.title,
-            description: `${session.venue.name} - ${formatDateTime(
-              session.startsAt,
-            )}`,
+  try {
+    // Stripe requires expires_at to be at least 30 minutes after it receives
+    // the request. The small buffer avoids network transit crossing that limit.
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: booking.parentEmail,
+      client_reference_id: booking.bookingReference,
+      expires_at:
+        Math.floor(Date.now() / 1000) + CHECKOUT_EXPIRY_SECONDS + 60,
+
+      line_items: [
+        {
+          quantity: booking.childCount,
+          price_data: {
+            currency: "gbp",
+            unit_amount: booking.unitPricePence,
+            product_data: {
+              name: session.title,
+              description: `${session.venue.name} - ${formatDateTime(
+                session.startsAt,
+              )}`,
+            },
           },
         },
+      ],
+
+      metadata: {
+        bookingId: booking.id,
+        bookingReference: booking.bookingReference,
+        sessionId: session.id,
+        venueId: session.venueId,
+        childCount: String(booking.childCount),
+        pricingType: booking.pricingType,
+        unitPricePence: String(booking.unitPricePence),
+        parentUserId: parentUser?.id ?? "",
+        pricingLabel: priceSummary.label,
       },
-    ],
 
-    metadata: {
-      bookingId: booking.id,
-      bookingReference: booking.bookingReference,
-      sessionId: session.id,
-      venueId: session.venueId,
-      childCount: String(booking.childCount),
-      pricingType: booking.pricingType,
-      unitPricePence: String(booking.unitPricePence),
-      parentUserId: parentUser?.id ?? "",
-      pricingLabel: priceSummary.label,
-    },
-
-    success_url: `${appUrl}/payment/success?booking=${booking.bookingReference}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appUrl}/payment/cancelled?booking=${booking.bookingReference}`,
-  });
-
-  await prisma.booking.update({
-    where: {
-      id: booking.id,
-    },
-    data: {
-      stripeCheckoutSessionId: checkoutSession.id,
-    },
-  });
-
-  if (!checkoutSession.url) {
-    return redirectWithError({
-      request,
-      venueId: input.venueId,
-      sessionId: input.sessionId,
-      error: "Could not start payment. Please try again.",
+      success_url: `${appUrl}/payment/success?booking=${booking.bookingReference}&token=${booking.bookingAccessToken}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/api/bookings/checkout-cancelled?booking=${booking.bookingReference}&token=${booking.bookingAccessToken}`,
     });
+
+    checkoutSessionId = checkoutSession.id;
+
+    await prisma.booking.update({
+      where: {
+        id: booking.id,
+      },
+      data: {
+        stripeCheckoutSessionId: checkoutSession.id,
+      },
+    });
+
+    if (checkoutSession.url) {
+      return NextResponse.redirect(checkoutSession.url, 303);
+    }
+  } catch (error) {
+    console.error(
+      `Could not start checkout for booking ${booking.bookingReference}`,
+      error,
+    );
+
+    if (checkoutSessionId) {
+      try {
+        await stripe.checkout.sessions.expire(checkoutSessionId);
+      } catch (expireError) {
+        console.error(
+          `Could not expire unusable checkout ${checkoutSessionId}`,
+          expireError,
+        );
+      }
+    }
   }
 
-  return NextResponse.redirect(checkoutSession.url, 303);
+  await markPendingBookingClosed({
+    bookingId: booking.id,
+    reason: PAYMENT_START_FAILED_REASON,
+  });
+
+  return redirectWithError({
+    request,
+    venueId: input.venueId,
+    sessionId: input.sessionId,
+    error: "Could not start payment. Please try again.",
+  });
 }

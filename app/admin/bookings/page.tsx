@@ -13,12 +13,62 @@ import { InputField } from "@/components/ui/form-field";
 import { Card } from "@/components/ui/card";
 import { formatDateTime, formatPrice } from "@/lib/formatters";
 import { LoadingButtonLink } from "@/components/ui/loading-button-link";
+import { Alert } from "@/components/ui/alert";
+import {
+  StatusViewNav,
+  type StatusViewValue,
+} from "@/components/ui/status-view-nav";
+import {
+  getBookingPaymentBadgeClass,
+  getBookingPaymentDisplay,
+} from "@/lib/booking-payment";
+import type { Prisma } from "@prisma/client";
+
+type BookingStatusFilter = "confirmed" | "pending" | "closed" | "all";
 
 type AdminBookingsPageProps = {
   searchParams?: Promise<{
     search?: string;
+    status?: BookingStatusFilter;
   }>;
 };
+
+function getStatusWhere(status: BookingStatusFilter): Prisma.BookingWhereInput {
+  if (status === "confirmed") {
+    return { status: "CONFIRMED" };
+  }
+
+  if (status === "pending") {
+    return { status: "PENDING" };
+  }
+
+  if (status === "closed") {
+    return { status: { in: ["CANCELLED", "REFUNDED"] } };
+  }
+
+  return {};
+}
+
+function getStatusViewHref({
+  status,
+  search,
+}: {
+  status: BookingStatusFilter;
+  search: string;
+}) {
+  const params = new URLSearchParams();
+
+  if (status !== "confirmed") {
+    params.set("status", status);
+  }
+
+  if (search) {
+    params.set("search", search);
+  }
+
+  const query = params.toString();
+  return query ? `/admin/bookings?${query}` : "/admin/bookings";
+}
 
 function getBookingSourceLabel(parentUserId: string | null) {
   return parentUserId ? "Account" : "Guest";
@@ -29,9 +79,16 @@ export default async function AdminBookingsPage({
 }: AdminBookingsPageProps) {
   const query = await searchParams;
   const search = query?.search?.trim() ?? "";
+  const requestedStatus = query?.status;
+  const status: BookingStatusFilter =
+    requestedStatus === "pending" ||
+    requestedStatus === "closed" ||
+    requestedStatus === "all"
+      ? requestedStatus
+      : "confirmed";
 
-  const bookings = await prisma.booking.findMany({
-    where: search
+  const bookingBaseWhere = {
+    ...(search
       ? {
           OR: [
             {
@@ -70,20 +127,72 @@ export default async function AdminBookingsPage({
             },
           ],
         }
-      : undefined,
-    orderBy: {
-      createdAt: "desc",
-    },
-    include: {
-      session: {
-        include: {
-          venue: true,
+      : {}),
+  } satisfies Prisma.BookingWhereInput;
+
+  const [bookings, confirmedCount, pendingCount, closedCount, allCount] =
+    await Promise.all([
+      prisma.booking.findMany({
+        where: {
+          ...bookingBaseWhere,
+          ...getStatusWhere(status),
         },
-      },
-      children: true,
-      parentUser: true,
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          session: {
+            include: {
+              venue: true,
+            },
+          },
+          children: true,
+          parentUser: true,
+        },
+      }),
+      prisma.booking.count({
+        where: { ...bookingBaseWhere, ...getStatusWhere("confirmed") },
+      }),
+      prisma.booking.count({
+        where: { ...bookingBaseWhere, ...getStatusWhere("pending") },
+      }),
+      prisma.booking.count({
+        where: { ...bookingBaseWhere, ...getStatusWhere("closed") },
+      }),
+      prisma.booking.count({ where: bookingBaseWhere }),
+    ]);
+
+  const statusViewItems: Array<{
+    value: StatusViewValue;
+    label: string;
+    count: number;
+    href: string;
+  }> = [
+    {
+      value: "confirmed",
+      label: "Confirmed",
+      count: confirmedCount,
+      href: getStatusViewHref({ status: "confirmed", search }),
     },
-  });
+    {
+      value: "pending",
+      label: "Awaiting payment",
+      count: pendingCount,
+      href: getStatusViewHref({ status: "pending", search }),
+    },
+    {
+      value: "closed",
+      label: "Closed",
+      count: closedCount,
+      href: getStatusViewHref({ status: "closed", search }),
+    },
+    {
+      value: "all",
+      label: "All",
+      count: allCount,
+      href: getStatusViewHref({ status: "all", search }),
+    },
+  ];
 
   const totalRevenuePence = bookings
     .filter((booking) => booking.paymentStatus === "PAID")
@@ -125,7 +234,9 @@ export default async function AdminBookingsPage({
 
         <div className="mb-8 grid gap-4 sm:grid-cols-2">
           <Card className="sm:py-4 sm:px-4">
-            <p className="text-sm text-(--color-text-secondary)">Bookings</p>
+            <p className="text-sm text-(--color-text-secondary)">
+              Bookings in this view
+            </p>
             <p className="text-lg font-semibold text-(--color-brand)">
               {bookings.length}
             </p>
@@ -150,11 +261,32 @@ export default async function AdminBookingsPage({
           </Card>
         </div>
 
+        <StatusViewNav
+          ariaLabel="Booking status views"
+          activeValue={status}
+          items={statusViewItems}
+        />
+
+        {status === "pending" ? (
+          <Alert className="mb-6">
+            <p className="font-semibold">These bookings are not confirmed</p>
+            <p className="mt-1">
+              They do not count towards the session register or capacity. New
+              payment windows close automatically after about 30 minutes; use the
+              booking detail page to close an older incomplete payment.
+            </p>
+          </Alert>
+        ) : null}
+
         <form
           action="/admin/bookings"
           method="GET"
           className="flex gap-1.5 sm:gap-3 mb-10 flex-row items-center"
         >
+          {status !== "confirmed" ? (
+            <input type="hidden" name="status" value={status} />
+          ) : null}
+
           <div className="relative flex-1">
             <Search
               aria-hidden="true"
@@ -176,7 +308,10 @@ export default async function AdminBookingsPage({
             <Button type="submit">Search</Button>
 
             {search ? (
-              <ButtonLink href="/admin/bookings" variant="secondary">
+              <ButtonLink
+                href={getStatusViewHref({ status, search: "" })}
+                variant="secondary"
+              >
                 Clear
               </ButtonLink>
             ) : null}
@@ -199,7 +334,10 @@ export default async function AdminBookingsPage({
               {search ? "No bookings match your search." : "No bookings yet."}
             </Card>
           ) : (
-            bookings.map((booking) => (
+            bookings.map((booking) => {
+              const display = getBookingPaymentDisplay(booking);
+
+              return (
               <AdminListCard key={booking.id}>
                 <AdminListCardHeader
                   title={booking.bookingReference}
@@ -212,15 +350,9 @@ export default async function AdminBookingsPage({
                   }
                   badge={
                     <span
-                      className={`rounded-md px-2 py-1 text-xs ${
-                        booking.status === "CONFIRMED"
-                          ? "bg-(--color-success-soft) text-(--color-success)"
-                          : booking.status === "PENDING"
-                            ? "bg-(--color-warning-soft) text-(--color-warning)"
-                            : "bg-(--color-danger-soft) text-(--color-danger)"
-                      }`}
+                      className={`rounded-md border px-2 py-1 text-xs ${getBookingPaymentBadgeClass(display.tone)}`}
                     >
-                      {booking.status}
+                      {display.label}
                     </span>
                   }
                   actions={
@@ -269,7 +401,13 @@ export default async function AdminBookingsPage({
 
                   <AdminListMetaItem
                     label="Payment"
-                    value={booking.paymentStatus}
+                    value={
+                      booking.paymentStatus === "PAID"
+                        ? "Paid"
+                        : booking.paymentStatus === "REFUNDED"
+                          ? "Refunded"
+                          : "Not paid"
+                    }
                   />
                 </AdminListMeta>
 
@@ -285,7 +423,8 @@ export default async function AdminBookingsPage({
                   </div>
                 ) : null}
               </AdminListCard>
-            ))
+              );
+            })
           )}
         </AdminList>
       </section>
