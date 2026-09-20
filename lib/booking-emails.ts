@@ -1,5 +1,15 @@
 import "server-only";
 import { getEmailFromAddress, resend } from "@/lib/email";
+import {
+  renderEmailButton,
+  renderEmailCard,
+  renderEmailDetail,
+  renderEmailLink,
+  renderEmailParagraph,
+  renderEmailSignOff,
+  renderEmailSmallPrint,
+  renderEmailTemplate,
+} from "@/lib/email-template";
 import { formatFullDateTime, formatPrice, formatTime } from "@/lib/formatters";
 
 type BookingConfirmationEmailInput = {
@@ -25,7 +35,6 @@ type BookingConfirmationEmailInput = {
 
 export async function sendBookingConfirmationEmail({
   to,
-  parentName,
   bookingReference,
   venueName,
   venueAddress,
@@ -46,21 +55,27 @@ export async function sendBookingConfirmationEmail({
 
   const subject = `Booking confirmed: ${bookingReference}`;
   const bookingLinkHtml = bookingUrl
-    ? `<p style="margin: 20px 0;"><a href="${bookingUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">View booking</a></p>`
+    ? renderEmailButton(bookingUrl, "View booking")
     : "";
 
   const accountLinkHtml = accountBookingUrl
-    ? `<p style="margin: 12px 0 0; font-size: 14px;">You can also view this booking from your parent account: <a href="${accountBookingUrl}">${accountBookingUrl}</a></p>`
+    ? renderEmailSmallPrint(
+        `You can also view this booking from your parent account: ${renderEmailLink(accountBookingUrl, "View in my account")}`,
+        "12px 0 24px",
+      )
     : "";
 
   const pricePerChildHtml =
     typeof unitPricePence === "number"
-      ? `<p style="margin: 0 0 8px;"><strong>Price per child:</strong> ${formatPrice(unitPricePence)}</p>`
+      ? renderEmailDetail("Price per child", formatPrice(unitPricePence))
       : "";
 
   const emergencyContactHtml =
     emergencyContactName && emergencyContactPhone
-      ? `<p style="margin: 0 0 8px;"><strong>Emergency contact:</strong> ${emergencyContactName} · ${emergencyContactPhone}</p>`
+      ? renderEmailDetail(
+          "Emergency contact",
+          `${emergencyContactName} · ${emergencyContactPhone}`,
+        )
       : "";
 
   const emergencyContactText =
@@ -68,41 +83,58 @@ export async function sendBookingConfirmationEmail({
       ? `Emergency contact: ${emergencyContactName} · ${emergencyContactPhone}`
       : "";
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <h1 style="font-size: 24px; margin-bottom: 8px;">Booking confirmed</h1>
+  const bookingDetailsHtml = renderEmailCard(
+    [
+      renderEmailDetail("Booking reference", bookingReference),
+      renderEmailDetail("Session", sessionTitle),
+      renderEmailDetail("Venue", venueName),
+      renderEmailDetail("Address", venueAddress || "TBC"),
+      renderEmailDetail(
+        "Date/time",
+        `${formatFullDateTime(startsAt)} - ${formatTime(endsAt)}`,
+      ),
+      renderEmailDetail("Children", childNames),
+      emergencyContactHtml,
+      pricePerChildHtml,
+      renderEmailDetail("Total paid", formatPrice(totalAmountPence), true),
+    ].join(""),
+  );
 
-      <p>Hi ${parentName},</p>
-
-      <p>Your booking has been confirmed. Please keep this email for your records.</p>
-
-      <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 20px 0;">
-        <p style="margin: 0 0 8px;"><strong>Booking reference:</strong> ${bookingReference}</p>
-        <p style="margin: 0 0 8px;"><strong>Session:</strong> ${sessionTitle}</p>
-        <p style="margin: 0 0 8px;"><strong>Venue:</strong> ${venueName}</p>
-        <p style="margin: 0 0 8px;"><strong>Address:</strong> ${venueAddress || "TBC"}</p>
-        <p style="margin: 0 0 8px;"><strong>Date/time:</strong> ${formatFullDateTime(startsAt)} - ${formatTime(endsAt)}</p>
-        <p style="margin: 0 0 8px;"><strong>Children:</strong> ${childNames}</p>
-        ${emergencyContactHtml}
-        ${pricePerChildHtml}
-        <p style="margin: 0;"><strong>Total paid:</strong> ${formatPrice(totalAmountPence)}</p>
-      </div>
-
-      ${bookingLinkHtml}
-      ${accountLinkHtml}
-
-      <p>Bookings and cancellations are available until the session starts. Cancellations made within 24 hours of the session are non-refundable.</p>
-
-      <p>Thanks,<br />Fitnest Studios</p>
-    </div>
-  `;
+  const html = renderEmailTemplate({
+    preheader: `Your ${sessionTitle} booking is confirmed.`,
+    eyebrow: "Your booking",
+    title: "Booking confirmed",
+    contentHtml: [
+      renderEmailParagraph("Dear Parent/Guardian,"),
+      renderEmailParagraph(
+        "Thank you for booking with FitNest Studios! We’re looking forward to welcoming your child and having lots of fun together.",
+      ),
+      bookingDetailsHtml,
+      bookingLinkHtml,
+      accountLinkHtml,
+      renderEmailParagraph(
+        "Before the session, please make sure your child has been to the toilet. If they require nappies, please bring one along for them.",
+      ),
+      renderEmailParagraph(
+        "To help us keep our sessions safe and comfortable for everyone, we don’t allow food, milk, juice or other drinks during sessions.",
+      ),
+      renderEmailParagraph(
+        "If your child needs a drink, you’re welcome to provide a water bottle for your child to use.",
+      ),
+      renderEmailParagraph(
+        "Thank you so much for your understanding and cooperation. We really appreciate it!",
+        "0",
+      ),
+      renderEmailSignOff("Kind regards,"),
+    ].join(""),
+  });
 
   const text = `
 Booking confirmed
 
-Hi ${parentName},
+Dear Parent/Guardian,
 
-Your booking has been confirmed.
+Thank you for booking with FitNest Studios! We’re looking forward to welcoming your child and having lots of fun together.
 
 Booking reference: ${bookingReference}
 Session: ${sessionTitle}
@@ -116,10 +148,16 @@ Total paid: ${formatPrice(totalAmountPence)}
 ${bookingUrl ? `\nView booking: ${bookingUrl}` : ""}
 ${accountBookingUrl ? `\nView in your account: ${accountBookingUrl}` : ""}
 
-Bookings and cancellations are available until the session starts. Cancellations made within 24 hours of the session are non-refundable.
+Before the session, please make sure your child has been to the toilet. If they require nappies, please bring one along for them.
 
-Thanks,
-Fitnest Studios
+To help us keep our sessions safe and comfortable for everyone, we don’t allow food, milk, juice or other drinks during sessions.
+
+If your child needs a drink, you’re welcome to provide a water bottle for your child to use.
+
+Thank you so much for your understanding and cooperation. We really appreciate it!
+
+Kind regards,
+FitNest Studios
   `.trim();
 
   const { error } = await resend.emails.send({
@@ -174,11 +212,14 @@ export async function sendBookingCancellationEmail({
   const subject = `Booking cancelled: ${bookingReference}`;
 
   const bookingLinkHtml = bookingUrl
-    ? `<p style="margin: 20px 0;"><a href="${bookingUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">View booking</a></p>`
+    ? renderEmailButton(bookingUrl, "View booking")
     : "";
 
   const accountLinkHtml = accountBookingUrl
-    ? `<p style="margin: 12px 0 0; font-size: 14px;">You can also view this booking from your parent account: <a href="${accountBookingUrl}">${accountBookingUrl}</a></p>`
+    ? renderEmailSmallPrint(
+        `You can also view this booking from your parent account: ${renderEmailLink(accountBookingUrl, "View in my account")}`,
+        "12px 0 24px",
+      )
     : "";
 
   const outcomeSummary = refunded
@@ -186,11 +227,17 @@ export async function sendBookingCancellationEmail({
     : "Your booking has been cancelled. Because it was cancelled within 24 hours of the session, it is non-refundable.";
 
   const refundAmountHtml = refunded
-    ? `<p style="margin: 0;"><strong>Refund amount:</strong> ${formatPrice(totalAmountPence)}</p>`
-    : `<p style="margin: 0;"><strong>Refund:</strong> No refund is due</p>`;
+    ? renderEmailDetail(
+        "Refund amount",
+        formatPrice(totalAmountPence),
+        true,
+      )
+    : renderEmailDetail("Refund", "No refund is due", true);
 
   const refundFollowUpHtml = refunded
-    ? "<p>Please allow a few working days for the refund to appear on your original payment method.</p>"
+    ? renderEmailParagraph(
+        "Please allow a few working days for the refund to appear on your original payment method.",
+      )
     : "";
 
   const refundAmountText = refunded
@@ -201,31 +248,31 @@ export async function sendBookingCancellationEmail({
     ? "\nPlease allow a few working days for the refund to appear on your original payment method."
     : "";
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <h1 style="font-size: 24px; margin-bottom: 8px;">Booking cancelled</h1>
+  const bookingDetailsHtml = renderEmailCard(
+    [
+      renderEmailDetail("Booking reference", bookingReference),
+      renderEmailDetail("Session", sessionTitle),
+      renderEmailDetail("Venue", venueName),
+      renderEmailDetail("Date/time", formatFullDateTime(startsAt)),
+      renderEmailDetail("Children", childNames),
+      refundAmountHtml,
+    ].join(""),
+  );
 
-      <p>Hi ${parentName},</p>
-
-      <p>${outcomeSummary}</p>
-
-      <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 20px 0;">
-        <p style="margin: 0 0 8px;"><strong>Booking reference:</strong> ${bookingReference}</p>
-        <p style="margin: 0 0 8px;"><strong>Session:</strong> ${sessionTitle}</p>
-        <p style="margin: 0 0 8px;"><strong>Venue:</strong> ${venueName}</p>
-        <p style="margin: 0 0 8px;"><strong>Date/time:</strong> ${formatFullDateTime(startsAt)}</p>
-        <p style="margin: 0 0 8px;"><strong>Children:</strong> ${childNames}</p>
-        ${refundAmountHtml}
-      </div>
-
-      ${bookingLinkHtml}
-      ${accountLinkHtml}
-
-      ${refundFollowUpHtml}
-
-      <p>Thanks,<br />Fitnest Studios</p>
-    </div>
-  `;
+  const html = renderEmailTemplate({
+    preheader: `Your ${sessionTitle} booking has been cancelled.`,
+    eyebrow: "Booking update",
+    title: "Booking cancelled",
+    contentHtml: [
+      renderEmailParagraph(`Hi ${parentName},`),
+      renderEmailParagraph(outcomeSummary),
+      bookingDetailsHtml,
+      bookingLinkHtml,
+      accountLinkHtml,
+      refundFollowUpHtml,
+      renderEmailSignOff(),
+    ].join(""),
+  });
 
   const text = `
 Booking cancelled
@@ -246,7 +293,7 @@ ${accountBookingUrl ? `\nView in your account: ${accountBookingUrl}` : ""}
 ${refundFollowUpText}
 
 Thanks,
-Fitnest Studios
+FitNest Studios
   `.trim();
 
   const { error } = await resend.emails.send({
