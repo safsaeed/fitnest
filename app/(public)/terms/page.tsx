@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 
 export default function TermsPage() {
@@ -94,6 +95,17 @@ export default function TermsPage() {
               is collected lawfully, stored securely, and used only for
               safeguarding and operational purposes. Data will not be shared
               without consent unless required by law.
+            </p>
+
+            <p className="mt-2">
+              Read more about account closure, retention, and your rights in our{" "}
+              <Link
+                href="/privacy"
+                className="font-medium text-(--color-brand) hover:underline"
+              >
+                privacy information
+              </Link>
+              .
             </p>
           </section>
         </Card>

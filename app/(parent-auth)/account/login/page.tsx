@@ -31,6 +31,14 @@ function getStatusMessage(status?: string) {
     return "Your password has been reset. You can now log in.";
   }
 
+  if (status === "account-deactivated") {
+    return "Your account has been deactivated. Your existing bookings remain valid.";
+  }
+
+  if (status === "deletion-requested") {
+    return "Your account has been deactivated and your deletion request has been received. We will contact you by email.";
+  }
+
   return null;
 }
 

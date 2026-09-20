@@ -1,5 +1,14 @@
 import "server-only";
 import { getEmailFromAddress, resend } from "@/lib/email";
+import {
+  renderEmailButton,
+  renderEmailCard,
+  renderEmailDetail,
+  renderEmailLink,
+  renderEmailParagraph,
+  renderEmailSignOff,
+  renderEmailTemplate,
+} from "@/lib/email-template";
 
 type AccountWelcomeEmailInput = {
   to: string;
@@ -14,32 +23,34 @@ export async function sendAccountWelcomeEmail({
   accountUrl,
   childrenUrl,
 }: AccountWelcomeEmailInput) {
-  const subject = "Welcome to your Fitnest Studios account";
+  const subject = "Welcome to your FitNest Studios account";
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <h1 style="font-size: 24px; margin-bottom: 8px;">Welcome to Fitnest Studios</h1>
-
-      <p>Hi ${parentName},</p>
-
-      <p>Your parent account has been created successfully.</p>
-
-      <p>You can now save child details and manage bookings from your account.</p>
-
-      <p style="margin: 20px 0;">
-        <a href="${accountUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">Go to my account</a>
-      </p>
-
-      <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 20px 0;">
-        <p style="margin: 0;"><strong>Save child details:</strong> <a href="${childrenUrl}">${childrenUrl}</a></p>
-      </div>
-
-      <p>Thanks,<br />Fitnest Studios</p>
-    </div>
-  `;
+  const html = renderEmailTemplate({
+    preheader: "Your FitNest Studios parent account is ready.",
+    eyebrow: "Welcome",
+    title: "Welcome to FitNest Studios",
+    contentHtml: [
+      renderEmailParagraph(`Hi ${parentName},`),
+      renderEmailParagraph(
+        "Your parent account has been created successfully.",
+      ),
+      renderEmailParagraph(
+        "You can now save child details and manage bookings from your account.",
+      ),
+      renderEmailButton(accountUrl, "Go to my account"),
+      renderEmailCard(
+        renderEmailDetail(
+          "Save child details",
+          renderEmailLink(childrenUrl, "Manage children"),
+          true,
+        ),
+      ),
+      renderEmailSignOff(),
+    ].join(""),
+  });
 
   const text = `
-Welcome to Fitnest Studios
+Welcome to FitNest Studios
 
 Hi ${parentName},
 
@@ -51,7 +62,7 @@ Account: ${accountUrl}
 Save child details: ${childrenUrl}
 
 Thanks,
-Fitnest Studios
+FitNest Studios
   `.trim();
 
   const { error } = await resend.emails.send({
@@ -78,39 +89,39 @@ export async function sendParentPasswordResetEmail({
   parentName,
   resetUrl,
 }: PasswordResetEmailInput) {
-  const subject = "Reset your Fitnest Studios password";
+  const subject = "Reset your FitNest Studios password";
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <h1 style="font-size: 24px; margin-bottom: 8px;">Reset your password</h1>
-
-      <p>Hi ${parentName},</p>
-
-      <p>We received a request to reset the password for your Fitnest Studios parent account.</p>
-
-      <p style="margin: 20px 0;">
-        <a href="${resetUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">Reset password</a>
-      </p>
-
-      <p>This link will expire in 1 hour. If you did not request this, you can ignore this email.</p>
-
-      <p>Thanks,<br />Fitnest Studios</p>
-    </div>
-  `;
+  const html = renderEmailTemplate({
+    preheader: "Use this secure link to reset your password.",
+    eyebrow: "Account security",
+    title: "Reset your password",
+    contentHtml: [
+      renderEmailParagraph(`Hi ${parentName},`),
+      renderEmailParagraph(
+        "We received a request to reset the password for your FitNest Studios parent account.",
+      ),
+      renderEmailButton(resetUrl, "Reset password"),
+      renderEmailParagraph(
+        "This link will expire in 1 hour. If you did not request this, you can ignore this email.",
+        "0",
+      ),
+      renderEmailSignOff(),
+    ].join(""),
+  });
 
   const text = `
 Reset your password
 
 Hi ${parentName},
 
-We received a request to reset the password for your Fitnest Studios parent account.
+We received a request to reset the password for your FitNest Studios parent account.
 
 Reset password: ${resetUrl}
 
 This link will expire in 1 hour. If you did not request this, you can ignore this email.
 
 Thanks,
-Fitnest Studios
+FitNest Studios
   `.trim();
 
   const { error } = await resend.emails.send({
@@ -137,43 +148,41 @@ export async function sendParentPasswordChangedEmail({
   parentName,
   loginUrl,
 }: PasswordChangedEmailInput) {
-  const subject = "Your Fitnest Studios password was changed";
+  const subject = "Your FitNest Studios password was changed";
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <h1 style="font-size: 24px; margin-bottom: 8px;">Password changed</h1>
-
-      <p>Hi ${parentName},</p>
-
-      <p>Your Fitnest Studios parent account password has been changed.</p>
-
-      <p>If this was you, no further action is needed.</p>
-
-      <p>If you did not make this change, please contact Fitnest Studios as soon as possible.</p>
-
-      <p style="margin: 20px 0;">
-        <a href="${loginUrl}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 14px; border-radius: 6px; text-decoration: none;">Go to login</a>
-      </p>
-
-      <p>Thanks,<br />Fitnest Studios</p>
-    </div>
-  `;
+  const html = renderEmailTemplate({
+    preheader: "Your FitNest Studios account password has been changed.",
+    eyebrow: "Account security",
+    title: "Password changed",
+    contentHtml: [
+      renderEmailParagraph(`Hi ${parentName},`),
+      renderEmailParagraph(
+        "Your FitNest Studios parent account password has been changed.",
+      ),
+      renderEmailParagraph("If this was you, no further action is needed."),
+      renderEmailParagraph(
+        "If you did not make this change, please contact FitNest Studios as soon as possible.",
+      ),
+      renderEmailButton(loginUrl, "Go to login"),
+      renderEmailSignOff(),
+    ].join(""),
+  });
 
   const text = `
 Password changed
 
 Hi ${parentName},
 
-Your Fitnest Studios parent account password has been changed.
+Your FitNest Studios parent account password has been changed.
 
 If this was you, no further action is needed.
 
-If you did not make this change, please contact Fitnest Studios as soon as possible.
+If you did not make this change, please contact FitNest Studios as soon as possible.
 
 Login: ${loginUrl}
 
 Thanks,
-Fitnest Studios
+FitNest Studios
   `.trim();
 
   const { error } = await resend.emails.send({

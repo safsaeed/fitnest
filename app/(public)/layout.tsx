@@ -71,6 +71,10 @@ export default function PublicLayout({
               Terms & Conditions
             </Link>
 
+            <Link href="/privacy" className="hover:text-(--color-brand)">
+              Privacy
+            </Link>
+
             <a
               href="mailto:contact@fitneststudios.co.uk"
               className="hover:text-(--color-brand)"
