@@ -3,8 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { ArrowLeft } from "lucide-react";
 import { formatDate, formatDateTime, formatPrice } from "@/lib/formatters";
+import { getAccountDeletionStatusLabel } from "@/lib/account-deletion";
+import { reactivateParentAccount } from "@/app/admin/account-deletion-requests/actions";
 import {
   getBookingPaymentBadgeClass,
   getBookingPaymentDisplay,
@@ -61,6 +64,7 @@ export default async function AdminParentDetailPage({
           children: true,
         },
       },
+      deletionRequest: true,
     },
   });
 
@@ -115,6 +119,14 @@ export default async function AdminParentDetailPage({
                 value={parent.isActive ? "Yes" : "No"}
               />
               <DetailRow
+                label="Deactivated"
+                value={
+                  parent.deactivatedAt
+                    ? formatDateTime(parent.deactivatedAt)
+                    : "—"
+                }
+              />
+              <DetailRow
                 label="Default emergency contact"
                 value={parent.defaultEmergencyContactName || "—"}
               />
@@ -127,7 +139,49 @@ export default async function AdminParentDetailPage({
                 value={formatDateTime(parent.createdAt)}
               />
             </div>
+
+            {!parent.isActive ? (
+              <div className="mt-6 border-t border-gray-100 pt-6">
+                <ConfirmActionDialog
+                  action={reactivateParentAccount.bind(null, parent.id)}
+                  title="Reactivate parent account?"
+                  description="The parent will be able to log in again. Any open deletion request will be marked as cancelled."
+                  confirmLabel="Reactivate account"
+                >
+                  Reactivate account
+                </ConfirmActionDialog>
+              </div>
+            ) : null}
           </Card>
+
+          {parent.deletionRequest ? (
+            <Card interactive={false}>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Deletion request</h2>
+                  <p className="mt-2 text-sm text-(--color-text-secondary)">
+                    Status:{" "}
+                    {getAccountDeletionStatusLabel(
+                      parent.deletionRequest.status,
+                    )}
+                  </p>
+                  <p className="mt-1 text-sm text-(--color-text-secondary)">
+                    Requested {formatDateTime(parent.deletionRequest.requestedAt)}
+                  </p>
+                  <p className="mt-1 text-sm text-(--color-text-secondary)">
+                    Response due {formatDateTime(parent.deletionRequest.responseDueAt)}
+                  </p>
+                </div>
+
+                <ButtonLink
+                  href="/admin/account-deletion-requests"
+                  variant="secondary"
+                >
+                  Review request
+                </ButtonLink>
+              </div>
+            </Card>
+          ) : null}
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">

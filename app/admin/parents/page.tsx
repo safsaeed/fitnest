@@ -13,6 +13,7 @@ import {
 import { LoadingButtonLink } from "@/components/ui/loading-button-link";
 import { ArrowLeft, Search } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
+import { getAccountDeletionStatusLabel } from "@/lib/account-deletion";
 
 type AdminParentsPageProps = {
   searchParams?: Promise<{
@@ -64,6 +65,11 @@ export default async function AdminParentsPage({
         select: {
           totalAmountPence: true,
           paymentStatus: true,
+        },
+      },
+      deletionRequest: {
+        select: {
+          status: true,
         },
       },
     },
@@ -214,6 +220,16 @@ export default async function AdminParentsPage({
                   />
 
                   <AdminListMeta>
+                    <AdminListMetaItem
+                      label="Account status"
+                      value={
+                        parent.isActive
+                          ? "Active"
+                          : parent.deletionRequest
+                            ? `Inactive · ${getAccountDeletionStatusLabel(parent.deletionRequest.status)}`
+                            : "Inactive"
+                      }
+                    />
                     <AdminListMetaItem
                       label="Saved children"
                       value={parent.children.length}

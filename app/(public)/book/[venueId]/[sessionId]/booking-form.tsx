@@ -471,9 +471,6 @@ export function BookingForm({
                   : "border-blue-100 bg-blue-50 text-blue-800"
           }`}
         >
-          <p className="font-medium">
-            Age availability for additional children
-          </p>
           <p className="mt-1">{staffingAvailabilityMessage}</p>
         </div>
 

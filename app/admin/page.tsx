@@ -15,6 +15,7 @@ export default async function AdminDashboardPage() {
     upcomingSessionCount,
     confirmedBookingCount,
     pendingPaymentCount,
+    openDeletionRequestCount,
     upcomingSessions,
     recentBookings,
   ] = await Promise.all([
@@ -42,6 +43,14 @@ export default async function AdminDashboardPage() {
     prisma.booking.count({
       where: {
         status: "PENDING",
+      },
+    }),
+
+    prisma.accountDeletionRequest.count({
+      where: {
+        status: {
+          in: ["PENDING", "IN_REVIEW"],
+        },
       },
     }),
 
@@ -141,6 +150,20 @@ export default async function AdminDashboardPage() {
                 </p>
                 <p className="text-lg font-semibold text-(--color-warning)">
                   {pendingPaymentCount}
+                </p>
+              </Card>
+            </Link>
+
+            <Link
+              href="/admin/account-deletion-requests"
+              className="hidden sm:block"
+            >
+              <Card className="max-w-1/5 min-w-40 sm:py-4 sm:px-4">
+                <p className="text-sm text-(--color-text-secondary)">
+                  Deletion requests
+                </p>
+                <p className="text-lg font-semibold text-(--color-warning)">
+                  {openDeletionRequestCount}
                 </p>
               </Card>
             </Link>

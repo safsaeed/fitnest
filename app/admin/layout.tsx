@@ -16,6 +16,10 @@ const adminNavigationItems: NavigationItem[] = [
   { href: "/admin/bookings", label: "Bookings" },
   { href: "/admin/interests", label: "Interests" },
   { href: "/admin/parents", label: "Parents" },
+  {
+    href: "/admin/account-deletion-requests",
+    label: "Deletion requests",
+  },
 ];
 
 export default async function AdminLayout({

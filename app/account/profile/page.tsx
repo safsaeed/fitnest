@@ -149,6 +149,28 @@ export default async function AccountProfilePage({
           </div>
         </form>
       </Card>
+
+      <Card interactive={false} className="border-(--color-danger-hover)">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-(--color-danger)">
+              Close account
+            </h2>
+            <p className="mt-1 text-sm text-(--color-text-secondary)">
+              Deactivate your account or request permanent deletion of personal
+              information we no longer need.
+            </p>
+          </div>
+
+          <ButtonLink
+            href="/account/close"
+            variant="destructive"
+            className="shrink-0"
+          >
+            Close account
+          </ButtonLink>
+        </div>
+      </Card>
     </div>
   );
 }
