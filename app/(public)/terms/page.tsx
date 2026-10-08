@@ -75,10 +75,6 @@ export default function TermsPage() {
                 non-refundable.
               </li>
               <li>
-                If you are unable to attend, please contact us as soon as
-                possible.
-              </li>
-              <li>
                 If you need to cancel, please do so using &quot;Find my
                 booking&quot; on the homepage as soon as possible.
               </li>
